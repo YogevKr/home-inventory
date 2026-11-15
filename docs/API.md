@@ -144,9 +144,18 @@ Existing records without this field remain unmarked and appear under **For me**.
 
 Sorting applies before pagination. Equal values use the item UUID for stable ordering.
 Unknown dates and prices appear last in both directions.
-Price sorting uses the recorded unit price. Currencies stay in alphabetical order; no currency conversion occurs.
+Price sorting compares estimated unit prices in USD across all currencies, before grouping and pagination.
+Original amounts and currencies remain unchanged. Zero prices come before positive prices in ascending order.
+Unknown prices remain last in both directions.
 Groups use their first purchase in the requested order, such as their earliest date or lowest price.
-For price sorting, a group with multiple currencies uses its first currency alphabetically.
+For price sorting, a group uses its lowest or highest USD estimate, according to the requested direction.
+
+Item-list responses include `sortPriceMinor`, the estimated USD unit price in cents, or `null` for unknown prices.
+They also include `priceReference`, with the currency, reference date, source URL, and conversion rates.
+Each rate expresses units of that currency per USD. Divide the original minor-unit amount by its rate and round.
+The bootstrap response includes the same reference. Rates stay fixed until the owner updates and deploys them.
+They are reference estimates, not purchase-date exchange rates or payment-card charges.
+The browser restarts pagination if a deployment changes the reference rates during browsing.
 The missing-photo filter checks active photos across all matching purchases in a product group.
 Receipts and removed photos do not count as photos.
 Other filters apply before grouping, so excluded purchases do not supply a group's photo.

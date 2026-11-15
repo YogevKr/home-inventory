@@ -7,6 +7,7 @@
     "dev": "npm run assets && cf dev --mode development",
     "build": "npm run assets && cf build",
     "check": "tsc --noEmit",
+    "rates:update": "node scripts/update-price-rates.mjs",
     "test": "node scripts/test.mjs",
     "test:running": "node --test --test-concurrency=1 tests/*.test.mjs",
     "deploy": "cf deploy",
