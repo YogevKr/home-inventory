@@ -33,6 +33,7 @@ Keep the development server on localhost.
 - Inbox cards with Keep, Later, Edit, Archive, and Undo buttons. Swipes and keyboard controls also work.
 - Sorting by name, update date, purchase date, and price. A filter shows items without photos.
 - Price sorting compares USD estimates across currencies and shows the original amounts with the reference-rate date.
+- Public item pages with selected fields, cleaned photos, expiry, preview, and link revocation.
 - Comments that remain separate from agent edits, revision checks, and change history.
 - Recoverable photo removal, item archiving, and confirmed permanent deletion.
 - ZIP exports with records and files. The agent CLI streams larger exports.
@@ -55,15 +56,17 @@ Keep credentials in your secret manager. The deployment file contains identifier
 flowchart LR
     Browser[Owner browser] --> Access[Cloudflare Access]
     Agent[Agent API client] --> Access
+    Visitor[Shared link visitor] -->|/share/* only| Worker
     Access --> Worker[Worker and static interface]
     Worker --> D1[D1 records and history]
     Worker --> R2[Private R2 files]
 ```
 
-The Worker checks signed Access tokens before serving pages, API responses, or files.
+The Worker checks signed Access tokens before serving private pages, API responses, or original files.
 Production disables local authentication, `workers.dev`, and preview URLs.
 An owner deploys one shared collection. The application has no separate roles or collections for different users.
-Every permitted user and agent can read, edit, and delete collection data.
+Every permitted user and agent can read, edit, delete, and share collection data.
+Public share pages expose only selected snapshots. Enable the narrow Access exception described in [the deployment guide](docs/DEPLOY.md#optional-public-item-sharing).
 
 ## Agents and API
 

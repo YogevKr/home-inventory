@@ -17,6 +17,10 @@ Inject both values through your secret manager. Never put them in command argume
 | GET | `/api/items/:id` | Details, attachments, comments, and recent history |
 | GET | `/api/items/:id/purchases` | Purchase summaries for the same product, including archived records |
 | PUT | `/api/items/:id` | Replace editable fields using the current revision |
+| GET | `/api/items/:id/share` | Get the current share link and selected fields |
+| POST | `/api/items/:id/share/preview` | Preview selected fields without publishing |
+| POST | `/api/items/:id/share` | Publish a share page |
+| DELETE | `/api/items/:id/share` | Revoke a share link using its share ID |
 | DELETE | `/api/items/:id` | Permanently delete one purchase using the current revision |
 | POST | `/api/items/:id/comments` | Append a comment |
 | POST | `/api/items/:id/attachments` | Upload a file |
@@ -262,3 +266,59 @@ The browser shows recovery controls under **Removed files**.
 
 Cloudflare Access can return a login redirect before requests reach the Worker.
 The CLI does not follow redirects carrying credential headers.
+
+## Public item pages
+
+Owners and agents can publish one active share link per purchase.
+The share-management routes require normal Access authentication and reject cross-site writes.
+Public pages use `/share/TOKEN`. Public photos use `/share/TOKEN/photo`.
+Only these routes and `/share/assets/page.css` bypass login after deployment configuration.
+
+Preview with `POST /api/items/ITEM_UUID/share/preview`. Publish with `POST /api/items/ITEM_UUID/share`.
+Send the current item revision and selected fields:
+
+```json
+{
+  "revision": 3,
+  "fields": ["brand", "model", "price", "productUrl"],
+  "description": "A note written for this page.",
+  "photoId": null,
+  "expiresAt": null
+}
+```
+
+`name` always appears. Optional fields are `brand`, `model`, `price`, `seller`, `purchaseDate`, `productUrl`, and `tags`.
+`fields` defaults to `brand` and `model`. Public descriptions default to empty and never copy private descriptions automatically.
+`expiresAt` accepts a future UTC ISO timestamp or `null` for no expiry. Omission selects 30 days.
+The preview returns `{ "html": "..." }` without creating a public link.
+Publication returns HTTP 201 with `id`, `url`, and `expiresAt`.
+A stale revision or existing active link returns HTTP 409.
+
+For a photo, send multipart form data with `data` containing the JSON above and `photo` containing a WebP file.
+Set `photoId` to an active photo attachment from that purchase. Receipts and other purchases' files are rejected.
+Re-encode the selected photo before sending it. The browser does this automatically.
+The API accepts a static WebP smaller than 1.5 MB and rejects metadata and animation chunks.
+It stores a separate photo copy without the original filename. It never publishes the original attachment URL.
+
+```sh
+node scripts/inventory.mjs share ITEM_UUID < share.json
+node scripts/inventory.mjs share ITEM_UUID /path/to/clean-photo.webp < share.json
+node scripts/inventory.mjs share-status ITEM_UUID
+node scripts/inventory.mjs revoke-share ITEM_UUID < revoke.json
+```
+
+For revocation, `revoke.json` contains the share UUID: `{ "id": "SHARE_UUID" }`.
+Repeated revocation is safe. HTTP 503 means access stopped but photo cleanup needs another revocation request.
+Revoke the existing link before publishing a replacement. Replacement links use new random tokens.
+
+Each page contains a saved snapshot. Later item edits do not change its fields.
+Removing its source photo hides the public photo. Restoring that photo makes it visible again.
+Deleting the purchase removes all its shares and public photo copies through the existing deletion cleanup process.
+Archiving a purchase preserves its share until revocation or expiry.
+
+Private descriptions, comments, locations, serial numbers, recipients, borrowers, receipts, history, and source links never enter snapshots.
+Tokens contain 256 random bits. Pages reject public writes, disable caching, block scripts, and suppress referrer headers.
+Search-engine exclusion headers request no indexing. Anyone with the link can view, copy, or save its content.
+Revocation cannot remove copies saved elsewhere. The public path provides no listing or search API.
+Share tokens remain in the private database so authorized owners can copy existing links.
+Collection exports exclude share tokens and public photo copies. Shares are not restored by importing an inventory export.

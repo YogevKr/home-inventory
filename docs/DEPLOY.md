@@ -148,3 +148,27 @@ Keep your deployment repository private if it includes owner notes or instance-s
 Use the public repository as the source of application updates.
 Review updates in a branch, run checks, apply new migrations, build, and deploy with your existing identifiers.
 Never replace your existing database or bucket just to update the application.
+
+## Optional public item sharing
+
+The Share button creates public pages under your inventory hostname, such as `https://inventory.example.com/share/TOKEN`.
+Keep the complete-hostname Access application and its existing owner and agent policies.
+
+After applying migrations and deploying the sharing code, create a second self-hosted Access application.
+Scope it to exactly `inventory.example.com/share/*`, using your own hostname.
+Set its only policy to **Bypass**, including **Everyone**. Hide this application from the application launcher.
+The more specific path application applies only to share requests.
+Do not edit the main application's protection or create a wildcard hostname exception.
+The Worker still rejects every public path except supported share pages, photos, and the share stylesheet.
+Keep R2 private. Share photos pass through the Worker and require an active, unexpired share token.
+
+Verify these cases in a signed-out browser:
+
+- A share link and its selected photo open without login.
+- A revoked, expired, or unknown link returns HTTP 404.
+- `/`, `/api/bootstrap`, `/api/items`, `/app.js`, and `/api/files/FILE_UUID` still require login.
+- Invalid `/share/` paths return HTTP 404 and public writes return HTTP 405.
+
+Share pages need no scheduled jobs, new services, or external rate requests.
+D1 stores snapshots and links. R2 stores cleaned photo copies. Expiry checks run only when visitors request a page.
+Revocation and item deletion remove photo copies. Expired copies remain until revocation or item deletion.
