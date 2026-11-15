@@ -1,0 +1,10 @@
+{
+  "accountId": "REPLACE_WITH_CLOUDFLARE_ACCOUNT_ID",
+  "workerName": "home-inventory",
+  "databaseName": "home-inventory",
+  "databaseId": "REPLACE_WITH_D1_DATABASE_ID",
+  "bucketName": "home-inventory-files",
+  "hostname": "inventory.example.com",
+  "accessIssuer": "https://YOUR_TEAM.cloudflareaccess.com",
+  "accessAudience": "REPLACE_WITH_ACCESS_APPLICATION_AUD"
+}

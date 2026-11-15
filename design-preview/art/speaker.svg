@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480" viewBox="0 0 640 480" role="img" aria-labelledby="title desc">
+  <title id="title">Sample portable speaker</title>
+  <desc id="desc">An original illustration of a cream fabric speaker with a brown strap on a sand background.</desc>
+  <defs>
+    <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#f0eae0"/><stop offset="1" stop-color="#e0d6c6"/></linearGradient>
+    <linearGradient id="case" x2="1" y2="0.3"><stop stop-color="#e4dfcf"/><stop offset="0.4" stop-color="#c8c4b2"/><stop offset="1" stop-color="#9f9f8e"/></linearGradient>
+    <linearGradient id="strap" x2="1" y2="0"><stop stop-color="#886b50"/><stop offset="0.5" stop-color="#b08f6d"/><stop offset="1" stop-color="#70553d"/></linearGradient>
+    <pattern id="weave" width="7" height="7" patternUnits="userSpaceOnUse"><path d="M0 1h7M1 0v7" stroke="#f1ecdf" stroke-width="1" opacity="0.5"/><path d="M0 4h7M4 0v7" stroke="#787e6a" stroke-width="1" opacity="0.34"/></pattern>
+    <filter id="shadow" x="-50%" y="-200%" width="200%" height="500%"><feGaussianBlur stdDeviation="12"/></filter>
+  </defs>
+  <path fill="url(#bg)" d="M0 0h640v480H0z"/>
+  <ellipse cx="317" cy="385" rx="169" ry="17" fill="#6d6d56" opacity="0.22" filter="url(#shadow)"/>
+  <g transform="rotate(-7 320 245)">
+    <path d="M252 172v-44c0-69 139-69 139 0v44" fill="none" stroke="#765c44" stroke-width="17"/>
+    <path d="M252 172v-44c0-69 139-69 139 0v44" fill="none" stroke="url(#strap)" stroke-width="11"/>
+    <path d="M256 121c9-49 119-49 131 0" fill="none" stroke="#d1b58e" stroke-width="2"/>
+    <rect x="154" y="156" width="338" height="223" rx="58" fill="#8e9581"/>
+    <rect x="145" y="150" width="338" height="223" rx="58" fill="url(#case)"/>
+    <rect x="153" y="173" width="316" height="190" rx="50" fill="url(#weave)"/>
+    <path d="M147 205q2-55 58-55h218q54 0 59 55Z" fill="url(#case)"/>
+    <path d="M158 195q9-33 45-34h215" fill="none" stroke="#f1eddf" stroke-width="3" opacity="0.65"/>
+    <path d="M163 333q11 32 47 32h213q32 0 45-30" fill="none" stroke="#e6e2d1" stroke-width="3" opacity="0.35"/>
+    <g stroke="#858c79" stroke-width="3" stroke-linecap="round" fill="none">
+      <path d="M271 176h10m28-5v10m-5-5h10m29-5v10m6-10v10"/>
+    </g>
+    <circle cx="375" cy="176" r="3" fill="#748d64"/>
+    <circle cx="250" cy="167" r="8" fill="#8b7258"/>
+    <circle cx="250" cy="167" r="3" fill="#c2aa86"/>
+    <circle cx="392" cy="167" r="8" fill="#8b7258"/>
+    <circle cx="392" cy="167" r="3" fill="#c2aa86"/>
+    <rect x="292" y="286" width="40" height="20" rx="10" fill="#d5d0bc" stroke="#a7ac93"/>
+    <path d="M304 297h16" stroke="#9ca78d" stroke-width="2" stroke-linecap="round"/>
+  </g>
+</svg>

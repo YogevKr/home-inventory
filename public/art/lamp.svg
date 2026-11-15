@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480" viewBox="0 0 640 480" role="img" aria-labelledby="title desc">
+  <title id="title">Sample table lamp</title>
+  <desc id="desc">An original illustration of an olive mushroom lamp on a pale warm background.</desc>
+  <defs>
+    <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#f2eee5"/><stop offset="1" stop-color="#e4e2d4"/></linearGradient>
+    <linearGradient id="shade" x2="1" y2="0.6"><stop stop-color="#a5ae80"/><stop offset="0.45" stop-color="#7f8d62"/><stop offset="0.78" stop-color="#68794f"/><stop offset="1" stop-color="#4f6140"/></linearGradient>
+    <linearGradient id="stem" x2="1" y2="0"><stop stop-color="#60744e"/><stop offset="0.38" stop-color="#a5ae7d"/><stop offset="0.7" stop-color="#7e8c5e"/><stop offset="1" stop-color="#4c6041"/></linearGradient>
+    <radialGradient id="glow"><stop stop-color="#ffe6a7" stop-opacity="0.5"/><stop offset="1" stop-color="#ffe6a7" stop-opacity="0"/></radialGradient>
+    <filter id="shadow" x="-50%" y="-200%" width="200%" height="500%"><feGaussianBlur stdDeviation="11"/></filter>
+  </defs>
+  <path fill="url(#bg)" d="M0 0h640v480H0z"/>
+  <ellipse cx="321" cy="307" rx="210" ry="137" fill="url(#glow)"/>
+  <ellipse cx="322" cy="396" rx="144" ry="14" fill="#6e7658" opacity="0.23" filter="url(#shadow)"/>
+  <path d="M361 388c38 4 52 32 116 25" fill="none" stroke="#b2ac96" stroke-width="4" stroke-linecap="round"/>
+  <path d="M288 219h65l19 145h-103Z" fill="url(#stem)"/>
+  <path d="M301 243h7l-3 111h-8Z" fill="#d5d6a3" opacity="0.3"/>
+  <ellipse cx="321" cy="375" rx="94" ry="21" fill="#586b45"/>
+  <path d="M228 370c8-30 177-31 185 0v7c-16 25-168 25-185 0Z" fill="url(#shade)"/>
+  <ellipse cx="320" cy="367" rx="90" ry="19" fill="#89966a"/>
+  <path d="M160 229c10-198 308-198 320 0Z" fill="url(#shade)"/>
+  <ellipse cx="320" cy="229" rx="160" ry="26" fill="#5f7047"/>
+  <ellipse cx="320" cy="231" rx="147" ry="19" fill="#d9d3a4"/>
+  <ellipse cx="320" cy="230" rx="58" ry="13" fill="#f4e8b7"/>
+  <path d="M189 185c13-42 47-78 91-89" fill="none" stroke="#c6cda3" stroke-width="7" opacity="0.3" stroke-linecap="round"/>
+  <path d="M161 226c85 20 234 20 318 0" fill="none" stroke="#a4ae7f" stroke-width="3"/>
+</svg>

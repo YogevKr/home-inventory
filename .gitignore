@@ -1,0 +1,15 @@
+node_modules
+.cloudflare/
+.wrangler/
+dist/
+.dev.vars*
+.env*
+test-results/
+*.log
+deployment.local.json
+docs/cloudflare-resources.json
+backups/
+imports/
+*.sqlite
+*.sqlite3
+*.db

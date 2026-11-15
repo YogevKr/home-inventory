@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480" viewBox="0 0 640 480" role="img" aria-labelledby="title desc">
+  <title id="title">Sample headphones</title>
+  <desc id="desc">An original illustration of cream headphones on a muted sage background.</desc>
+  <defs>
+    <linearGradient id="bg" x2="0.8" y2="1"><stop stop-color="#e5e9e0"/><stop offset="1" stop-color="#d3dbcc"/></linearGradient>
+    <linearGradient id="cream" x2="1" y2="1"><stop stop-color="#fffaf0"/><stop offset="0.45" stop-color="#e6dfd0"/><stop offset="1" stop-color="#b5b5a5"/></linearGradient>
+    <linearGradient id="pad" x2="1" y2="0.7"><stop stop-color="#9c9e8e"/><stop offset="0.4" stop-color="#d3d1bd"/><stop offset="1" stop-color="#969d8c"/></linearGradient>
+    <filter id="shadow" x="-50%" y="-200%" width="200%" height="500%"><feGaussianBlur stdDeviation="13"/></filter>
+  </defs>
+  <path fill="url(#bg)" d="M0 0h640v480H0z"/>
+  <ellipse cx="323" cy="399" rx="151" ry="15" fill="#4e604b" opacity="0.21" filter="url(#shadow)"/>
+  <g transform="rotate(-13 320 244)">
+    <path d="M184 274v-70c0-185 273-185 273 0v70" fill="none" stroke="#a4aa99" stroke-width="32"/>
+    <path d="M184 253v-49c0-178 273-178 273 0v49" fill="none" stroke="url(#cream)" stroke-width="26"/>
+    <path d="M190 173c29-125 231-126 260 0" fill="none" stroke="#e9e4d5" stroke-width="33" stroke-linecap="round"/>
+    <path d="M197 151c40-93 205-94 247 0" fill="none" stroke="#fffaf0" stroke-width="3" stroke-linecap="round" opacity="0.7"/>
+    <path d="m184 244 4 72m267-72-4 72" fill="none" stroke="#a8ad9b" stroke-width="14"/>
+    <g transform="rotate(-12 207 309)">
+      <rect x="159" y="236" width="91" height="145" rx="45" fill="#a0a692"/>
+      <rect x="172" y="239" width="89" height="145" rx="43" fill="url(#pad)"/>
+      <rect x="156" y="231" width="77" height="145" rx="38" fill="url(#cream)"/>
+      <path d="M175 248c-17 14-16 85-4 107" fill="none" stroke="#fffdf3" stroke-width="3" opacity="0.7"/>
+      <path d="M175 365h29" stroke="#9ba48e" stroke-width="3" stroke-linecap="round"/>
+    </g>
+    <g transform="rotate(12 431 309)">
+      <rect x="388" y="239" width="88" height="145" rx="43" fill="url(#pad)"/>
+      <rect x="408" y="231" width="77" height="145" rx="38" fill="url(#cream)"/>
+      <path d="M420 255c9-18 34-17 45-1" fill="none" stroke="#fffdf3" stroke-width="3" opacity="0.7"/>
+      <path d="M471 318v22" stroke="#9fa693" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="470" cy="353" r="3" fill="#8b967e"/>
+    </g>
+  </g>
+</svg>

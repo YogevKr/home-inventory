@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#fcfcfd">
+  <meta name="description" content="Your private home collection. Find what you own and where it belongs.">
+  <title>Home Inventory · Your collection</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to collection</a>
+  <header class="site-header">
+    <a class="brand" href="/" aria-label="Home Inventory"><span class="brand-mark">h.</span><span>home inventory</span></a>
+    <nav aria-label="Main navigation" id="main-nav"></nav>
+    <div class="header-account"><span class="private-label">Private collection</span><span class="avatar" aria-label="Owner">HI</span></div>
+  </header>
+  <div class="workspace">
+    <main id="main" tabindex="-1">
+      <div class="page-heading"><div><div class="eyebrow">A PLACE FOR EVERYTHING</div><h1 id="title">Your collection.</h1><p class="lead" id="subtitle">Find what you own. Know where it belongs.</p></div><button class="button primary" data-action="add"><span>+</span> Add item</button></div>
+      <div id="sample-banner" class="sample-banner" hidden><span><strong>Sample collection</strong> · These items show how the site works.</span><button data-action="leave-sample">Start your collection <span>↗</span></button></div>
+      <div id="view-content"><div class="loading"><span class="spinner"></span>Opening your collection…</div></div>
+      <details class="collection-summary"><summary>Collection summary</summary><section id="summary" class="summary" aria-label="Collection summary"></section></details>
+    </main>
+    <footer class="page-footer"><span>Home Inventory · Your private collection</span><button class="text-button" data-action="export">Export collection <span>↗</span></button></footer>
+  </div>
+  <dialog id="detail" class="drawer" aria-label="Item details"></dialog>
+  <dialog id="editor" class="editor-dialog" aria-labelledby="editor-title"></dialog>
+  <dialog id="place-editor" class="small-dialog" aria-labelledby="place-title"></dialog>
+  <dialog id="delete-dialog" class="small-dialog" aria-labelledby="delete-title"></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>
