@@ -31,7 +31,11 @@ const validId = value => { if (!/^[0-9a-f-]{36}$/i.test(value || '')) throw new 
 try {
   switch (command) {
     case 'list': output(await (await request(`/api/items?${new URLSearchParams({ q: id || '', limit: '200' })}`)).json()); break;
+    case 'wishlist': output(await (await request(`/api/items?${new URLSearchParams({ status: 'wishlist', q: id || '', limit: '200' })}`)).json()); break;
     case 'get': output(await (await request(`/api/items/${validId(id)}`)).json()); break;
+    case 'prices': output(await (await request(`/api/items/${validId(id)}/prices`)).json()); break;
+    case 'check-price': output(await jsonRequest(`/api/items/${validId(id)}/prices/check`, 'POST', await stdin())); break;
+    case 'record-price': output(await jsonRequest(`/api/items/${validId(id)}/prices`, 'POST', await stdin())); break;
     case 'places': output((await (await request('/api/bootstrap')).json()).locations); break;
     case 'create': output(await jsonRequest('/api/items', 'POST', await stdin())); break;
     case 'update': output(await jsonRequest(`/api/items/${validId(id)}`, 'PUT', await stdin())); break;
@@ -80,6 +84,6 @@ try {
       }
       output({ directory: id, items: records.items.length, files: records.attachments.length }); break;
     }
-    default: process.stdout.write('Usage: inventory.mjs list [query] | get ID | places | create < JSON | update ID < JSON | delete ID < JSON | share ID [PHOTO_PATH] < JSON | share-status ID | revoke-share ID < JSON | comment ID < JSON | place < JSON | attach ID PATH [kind] | remove-file ITEM_ID FILE_ID | restore-file ITEM_ID FILE_ID | export NEW_DIRECTORY\n');
+    default: process.stdout.write('Usage: inventory.mjs list [query] | wishlist [query] | get ID | prices ID | check-price ID < JSON | record-price ID < JSON | places | create < JSON | update ID < JSON | delete ID < JSON | share ID [PHOTO_PATH] < JSON | share-status ID | revoke-share ID < JSON | comment ID < JSON | place < JSON | attach ID PATH [kind] | remove-file ITEM_ID FILE_ID | restore-file ITEM_ID FILE_ID | export NEW_DIRECTORY\n');
   }
 } catch (error) { process.stderr.write(`${error.message}\n`); process.exitCode = 1; }
