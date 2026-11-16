@@ -30,6 +30,22 @@ async def main():
             await page.get_by_role('searchbox').fill(marker)
             await page.get_by_label('Sort items',exact=True).select_option('name:asc')
             await expect(page.locator('.item-card')).to_have_count(120)
+            for index,has_photo in [(0,True),(2,False)]:
+                await page.get_by_role('button',name=f'Open {marker} {index:03}',exact=True).click()
+                await page.get_by_role('button',name='Edit item',exact=True).click()
+                editor=page.get_by_role('dialog',name='Edit item',exact=True)
+                if has_photo:
+                    photo=editor.get_by_role('img',name=f'Current photo of {marker} {index:03}',exact=True)
+                    await expect(photo).to_be_visible()
+                    await photo.evaluate('image=>image.decode()')
+                    await expect(editor.get_by_text('Add another photo',exact=True)).to_be_visible()
+                else:
+                    assert not await editor.get_by_role('img').count()
+                    await expect(editor.get_by_text('Add a photo',exact=True)).to_be_visible()
+                await expect(editor.get_by_label('Item photo',exact=True)).to_be_enabled()
+                await page.get_by_role('button',name='Close editor',exact=True).click()
+                await page.get_by_role('button',name='Close details',exact=True).click()
+            print('PASS iPhone editor shows the current photo and clears it for items without photos',flush=True)
             await page.get_by_role('button',name='Filters',exact=True).click()
             await page.get_by_role('button',name='No photo',exact=True).click()
             await expect(page.locator('.result-count')).to_have_text('123 products · 123 purchases')
