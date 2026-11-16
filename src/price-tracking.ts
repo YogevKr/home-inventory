@@ -1,8 +1,9 @@
 import { z } from 'zod';
 import { itemRow, itemData, type ItemId } from './domain.ts';
 import { checkableUrl, PriceError, readPrice } from './price-reader.ts';
+import { brightDataTarget, readBrightDataPrice, priceSource, type BrightDataEnv } from './bright-data.ts';
 
-export interface PriceEnv { DB: D1Database; PRICE_CHECK_HOSTS?: string }
+export interface PriceEnv extends BrightDataEnv { DB: D1Database; PRICE_CHECK_HOSTS?: string }
 const checkInput = z.object({ revision: z.number().int().positive() }).strict();
 const recordInput = checkInput.extend({
   id: z.uuid().optional(),
@@ -13,6 +14,7 @@ const recordInput = checkInput.extend({
 const observation = z.object({
   id: z.uuid(), item_id: z.string(), product_url: z.string(), price_minor: z.number(), currency: z.string(),
   method: z.enum(['page', 'recorded']), actor: z.string(), observed_at: z.string(),
+  source: z.string().nullable().transform(value => value === null ? null : priceSource.parse(JSON.parse(value))),
 });
 const lastCheck = z.object({ checked_at: z.string(), error: z.string().nullable() });
 const stats = z.object({ count: z.number(), lowest: z.number().nullable() });
@@ -26,8 +28,16 @@ export async function priceTracking(env: PriceEnv, item: z.infer<typeof itemRow>
   ]);
   let reason: string | null = null;
   try { checkableUrl(productUrl, env.PRICE_CHECK_HOSTS); } catch (error) { if (error instanceof PriceError) reason = error.message; else throw error; }
+  let provider: 'page' | 'brightdata' = 'page';
+  let market: string | null = null;
+  if (!reason) {
+    try {
+      const target = brightDataTarget(productUrl, currency, env);
+      if (target) { provider = 'brightdata'; market = target.store === 'amazon' ? `US · ZIP ${target.postalCode}` : 'US'; }
+    } catch (error) { if (error instanceof PriceError) reason = error.message; else throw error; }
+  }
   return {
-    supported: reason === null, reason,
+    supported: reason === null, reason, provider, market,
     observations: z.array(observation).parse(history?.results),
     ...stats.parse(totals?.results[0]),
     lastCheck: checked?.results[0] ? lastCheck.parse(checked.results[0]) : null,
@@ -44,10 +54,10 @@ async function wishlistItem(env: PriceEnv, id: ItemId, revision: number) {
   return item;
 }
 
-async function savePrice(env: PriceEnv, item: z.infer<typeof itemRow>, value: { id: string; priceMinor: number; currency: string }, method: 'page' | 'recorded', actor: string) {
-  const result = await env.DB.prepare(`INSERT INTO price_observations(id,item_id,product_url,price_minor,currency,method,actor)
-    SELECT ?,id,?,?,?, ?,? FROM items WHERE id=? AND revision=? AND status='wishlist'
-    ON CONFLICT(id) DO NOTHING`).bind(value.id, item.data.productUrl, value.priceMinor, value.currency, method, actor, item.id, item.revision).run();
+async function savePrice(env: PriceEnv, item: z.infer<typeof itemRow>, value: { id: string; priceMinor: number; currency: string; source?: z.infer<typeof priceSource> }, method: 'page' | 'recorded', actor: string) {
+  const result = await env.DB.prepare(`INSERT INTO price_observations(id,item_id,product_url,price_minor,currency,method,actor,source)
+    SELECT ?,id,?,?,?, ?,?,? FROM items WHERE id=? AND revision=? AND status='wishlist'
+    ON CONFLICT(id) DO NOTHING`).bind(value.id, item.data.productUrl, value.priceMinor, value.currency, method, actor, value.source ? JSON.stringify(value.source) : null, item.id, item.revision).run();
   if (!result.meta.changes) {
     const existing = await env.DB.prepare('SELECT * FROM price_observations WHERE id=?').bind(value.id).first();
     if (!existing) throw new PriceError(409, 'This item changed during the check. Reload it before trying again.');
@@ -72,6 +82,7 @@ export async function checkPrice(env: PriceEnv, id: ItemId, body: unknown, actor
   const { revision } = checkInput.parse(body);
   const item = await wishlistItem(env, id, revision);
   checkableUrl(item.data.productUrl, env.PRICE_CHECK_HOSTS);
+  const target = brightDataTarget(item.data.productUrl, item.data.currency, env);
   const checkId = crypto.randomUUID();
   const claimed = await env.DB.prepare(`INSERT INTO price_checks(item_id,check_id,product_url,currency,checked_at,error)
     SELECT id,?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'),'The price check did not finish. Try again.'
@@ -83,7 +94,17 @@ export async function checkPrice(env: PriceEnv, id: ItemId, body: unknown, actor
     throw new PriceError(429, 'Wait one minute before checking this item again.', 'check_cooldown');
   }
   try {
-    const value = await readPrice(item.data.productUrl, item.data.currency, env.PRICE_CHECK_HOSTS);
+    if (target) {
+      const limit = z.coerce.number().int().min(0).max(5000).safeParse(env.BRIGHT_DATA_DAILY_LIMIT ?? '50');
+      if (!limit.success) throw new PriceError(503, 'The Bright Data daily limit setting is invalid.', 'provider_config');
+      const budget = await env.DB.prepare(`INSERT INTO price_provider_usage(day,requests)
+        SELECT date('now'),1 WHERE ? > 0
+        ON CONFLICT(day) DO UPDATE SET requests=requests+1 WHERE requests < ?`).bind(limit.data, limit.data).run();
+      if (!budget.meta.changes) throw new PriceError(429, 'The daily Bright Data limit is reached. Try after 00:00 UTC.', 'provider_budget');
+    }
+    const value = target && env.BRIGHT_DATA_API_KEY
+      ? await readBrightDataPrice(target, env.BRIGHT_DATA_API_KEY)
+      : await readPrice(item.data.productUrl, item.data.currency, env.PRICE_CHECK_HOSTS);
     await savePrice(env, item, { ...value, id: checkId }, 'page', actor);
     await env.DB.prepare('UPDATE price_checks SET error=NULL WHERE item_id=? AND check_id=?').bind(id, checkId).run();
   } catch (error) {

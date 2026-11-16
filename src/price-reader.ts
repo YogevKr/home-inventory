@@ -3,7 +3,8 @@ import { itemData } from './domain.ts';
 
 type PriceErrorCode = 'price_error' | 'unsupported_store' | 'offer_missing' | 'offer_ambiguous' | 'offer_invalid'
   | 'currency_mismatch' | 'offer_unavailable' | 'offer_condition' | 'offer_expired' | 'redirect_rejected'
-  | 'store_blocked' | 'page_invalid' | 'page_too_large' | 'product_data_too_large' | 'store_unreachable' | 'check_cooldown';
+  | 'store_blocked' | 'page_invalid' | 'page_too_large' | 'product_data_too_large' | 'store_unreachable' | 'check_cooldown'
+  | 'provider_config' | 'provider_auth' | 'provider_limit' | 'provider_pending' | 'provider_unavailable' | 'provider_budget';
 
 export class PriceError extends Error {
   status: number;

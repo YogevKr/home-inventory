@@ -100,7 +100,10 @@ Open an item to record prices or request a direct store check. No scheduled chec
 Store blocking and missing product data can prevent direct checks. Manual and agent recording remain available.
 The reader streams pages up to 8 MB and retains up to 512 KB of structured price data.
 Failed checks keep saved prices and open the recording form. Price labels show whether a store check or recording supplied them.
-Apply migration `0006_price_tracking.sql` before deployment. See [price tracking](docs/API.md#price-tracking).
+Optional Bright Data checks read regular USD prices from Amazon US and US iHerb.
+Provider checks show the delivery market and preserve saved prices on failure.
+They run only on request, with a default deployment limit of 50 requests per UTC day.
+Apply migrations through `0007_price_provider.sql` before deployment. See [price tracking](docs/API.md#price-tracking).
 
 Agents use `status: "wishlist"` to save future purchases. See [wishlist API usage](docs/API.md#wishlist).
 
@@ -108,7 +111,7 @@ Agents use `status: "wishlist"` to save future purchases. See [wishlist API usag
 
 No scheduled jobs, containers, or continuously running server are required.
 Idle deployments consume storage. Account subscriptions, domain registration, and storage above included allowances can still incur charges.
-Traffic adds Worker, D1, and R2 operations. Free allowances depend on your account and plan.
+Traffic adds Worker, D1, and R2 operations. Optional Bright Data checks consume provider credits only when requested. Free allowances depend on your account and plan.
 Browser uploads resize photos to 1,600 pixels and encode WebP, with JPEG fallback for browsers without WebP encoding.
 
 Check current pricing for [Workers](https://developers.cloudflare.com/workers/platform/pricing/),

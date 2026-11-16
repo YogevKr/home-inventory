@@ -146,9 +146,9 @@ Shared pages use neutral Price and Store labels. Sharing does not publish an ite
 
 ### Price tracking
 
-Apply migration `0006_price_tracking.sql` before running this version.
+Apply migrations through `0007_price_provider.sql` before running this version.
 Open a wishlist item to use its price tracker. Checks run only when requested.
-There is no scheduled Worker, notification service, browser session, or paid scraping service.
+There is no scheduled Worker, notification service, or browser session. Bright Data is an optional external price reader.
 
 Tracked prices use separate records. They never replace `data.priceMinor` or change purchase totals, sorting, or the item revision.
 Each record stores its product link, currency, timestamp, source method, and authenticated actor.
@@ -157,13 +157,17 @@ Bought and archived items retain their series. Only wishlist items accept new pr
 Deleting an item also deletes its price records and check results.
 Public share pages do not expose price history, check results, or actors.
 
-`GET /api/items/:id/prices` returns `observations`, `count`, `lowest`, `supported`, `reason`, and `lastCheck`.
+`GET /api/items/:id/prices` returns `observations`, `count`, `lowest`, `supported`, `reason`, `provider`, `market`, and `lastCheck`.
+`provider` is `page` or `brightdata`. `market` describes the configured provider delivery location, or is null.
 Item details include the same object under `priceTracking`.
 The result contains the latest 100 observations for the current product link and currency, newest first.
 `count` and `lowest` cover the full series. Each observation uses integer `price_minor` and a server `observed_at` timestamp.
-`method` is `page` for direct checks or `recorded` for manual and agent entries.
+`method` is `page` for automatic checks or `recorded` for manual and agent entries.
+Provider observations also contain `source`: `{provider:"brightdata",market:"US",postalCode:"10001",offer:"regular",seller:"Store name"}`.
+`postalCode` is null for iHerb. `seller` can be null. Direct checks and recorded observations have `source: null`.
+The full export stores this field as JSON text. The price API returns a parsed object.
 `supported: true` means the host permits a check. It does not confirm that the store publishes a readable offer.
-The latest saved price remains valid history after a failed check. `lastCheck` describes the separate direct check.
+The latest saved price remains valid history after a failed check. `lastCheck` describes the separate check.
 `/api/export` includes all series in `priceObservations` and check status in `priceChecks`.
 
 Record a verified price:
@@ -183,7 +187,7 @@ An identical retry returns the existing observation. A conflicting UUID returns 
 Record only the verified price for the exact model and options. Check shipping and discounts separately.
 Verify the price at the item's saved product URL. An expected price or another store's price is not an observation.
 
-Request a direct check:
+Request a price check:
 
 ```json
 {"revision":3}
@@ -192,6 +196,41 @@ Request a direct check:
 ```sh
 node scripts/inventory.mjs check-price ITEM_UUID < revision.json
 ```
+
+### Optional Bright Data checks
+
+When `BRIGHT_DATA_API_KEY` is configured, USD items on Amazon US and the US iHerb host use Bright Data.
+The same `POST /api/items/:id/prices/check` endpoint selects the reader. Agents need no provider key.
+Other markets, currencies, and stores retain the direct reader. AliExpress has no Bright Data integration.
+
+Amazon links must identify an ASIN through `/dp/ASIN` or `/gp/product/ASIN`.
+iHerb links must use `/pr/NAME/PRODUCT_ID` on `www.iherb.com` or `iherb.com`.
+Seller and variant filters in query parameters require a clean, exact product link first.
+Requests send only the canonical product URL, product ID, and configured delivery ZIP to Bright Data.
+Inventory names, photos, comments, purchase records, and Access credentials stay in the inventory service.
+
+Amazon uses a US delivery ZIP, default `10001`. This does not confirm delivery to the owner's address.
+The reader checks the returned ASIN, URL, ZIP, currency, availability, and buying option.
+It selects a new-item regular offer. Prime membership, subscriptions, and used offers never supply the recorded price.
+iHerb uses its US storefront and regular `price` field. It ignores separate sale fields with unknown conditions.
+The reader requires the exact product and variant, `store_country: "US"`, and an explicit USD currency or dollar-prefixed US price.
+Unavailable items add no observation. A price shown for an unavailable item does not become an available offer.
+Shipping, tax, checkout coupons, and delivery eligibility need separate verification.
+
+Provider metadata appears beside the saved price. Changes in source, seller, or delivery context suppress the price-change comparison.
+The history and lowest recorded value still cover all observations for the saved product URL and currency.
+Review their source details before treating different offer conditions as a price drop.
+
+The default provider limit is 50 requests per UTC day across the deployment.
+Set `BRIGHT_DATA_DAILY_LIMIT` from 0 to 5000 to change it; 0 stops provider requests.
+Concurrent checks share an atomic database counter. Failed requests also consume the limit.
+The existing per-item one-minute cooldown also applies. No automatic retries or scheduled calls occur.
+Provider requests have a 45-second timeout and a 1 MB response limit. Redirects never receive the API key.
+An asynchronous provider response returns `provider_pending`; this version does not resume that job.
+Do not retry pending work during the same run. The provider can consume credits even when no price is saved.
+The limit counts API requests, not credits. Bright Data controls credit usage and account billing.
+
+### Direct page checks
 
 Direct checks require HTTPS and an approved store host.
 The default hosts cover Amazon US, UK, DE, FR, IT, ES; iHerb; AliExpress; Shop; and Shop.com.
@@ -222,10 +261,15 @@ Authentication and input-validation failures use the standard API errors.
 | `store_blocked`, `page_invalid`, `redirect_rejected` | Check the saved link in a browser. The store can require a session. |
 | `store_unreachable` | Retry later or record a verified price. |
 | `check_cooldown` | Wait at least one minute before another check. |
+| `provider_budget` | The deployment limit is reached. Wait until 00:00 UTC. |
+| `provider_auth`, `provider_config` | Ask the site owner to check the provider key or configuration. |
+| `provider_limit` | Check Bright Data account credits or limits before another request. |
+| `provider_pending` | The provider started asynchronous work. Do not retry during the same run. |
+| `provider_unavailable` | Keep saved prices. Retry later or record a verified price. |
 | `price_error` | Follow the message. The item or revision can require an update. |
 
 These codes describe the failed request. Saved `lastCheck.error` retains the readable message.
-HTTP 422 adds no observation and preserves earlier prices. Do not repeatedly retry permanent failures during one run.
+HTTP 422, 429, and 503 add no observation and preserve earlier prices. Do not repeatedly retry permanent failures during one run.
 
 Self-hosted deployments can add a `PRICE_CHECK_HOSTS` text binding containing comma-separated exact hostnames.
 Add only trusted public store hosts. Never add internal services or domains that resolve to private networks.
