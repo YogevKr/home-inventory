@@ -10,6 +10,7 @@ export class ItemSharing {
     this.dialog.addEventListener('submit', event => { event.preventDefault(); this.publish().catch(error => this.error(error)); });
     this.dialog.addEventListener('input', () => this.schedulePreview());
     this.dialog.addEventListener('change', () => this.schedulePreview());
+    this.dialog.addEventListener('invalid', () => this.showPane('settings'), true);
     this.dialog.addEventListener('cancel', event => { if (this.busy) event.preventDefault(); });
     this.dialog.addEventListener('close', () => { clearTimeout(this.timer); this.previewId++; });
     this.previewId = 0;
@@ -74,11 +75,12 @@ export class ItemSharing {
   }
 
   render() {
+    this.dialog.dataset.pane = 'settings';
     const d = this.item?.data ?? { tags: [], priceMinor: null };
     const error = '<div id="share-error" class="error-message" role="alert" tabindex="-1" hidden></div>';
     const photos = (this.item?.attachments ?? []).filter(file => file.kind === 'photo');
     const options = [['brand', 'Brand', d.brand], ['model', 'Model', d.model], ['price', 'Price paid', d.priceMinor === null ? '' : new Intl.NumberFormat('en-US', { style: 'currency', currency: d.currency }).format(d.priceMinor / 100)], ['seller', 'Store', d.seller], ['purchaseDate', 'Purchase date', d.purchaseDate], ['productUrl', 'Product link', d.productUrl], ['tags', 'Tags', d.tags.join(', ')]];
-    this.dialog.innerHTML = `<div class="dialog-heading"><div><p class="share-eyebrow">${this.items ? `${this.items.length} ITEMS, ONE PAGE` : this.endpoint.startsWith('/api/collection-shares') ? 'A SHARED COLLECTION' : 'A PAGE FOR ONE ITEM'}</p><h2 id="share-title">${this.endpoint.startsWith('/api/collection-shares') ? 'Share a collection' : 'Share this item'}</h2></div><button class="icon-btn" data-share-action="close" aria-label="Close sharing">×</button></div>${this.share ? error : ''}${this.share ? this.activePage() : `<form id="share-form"><div class="share-workspace"><div class="share-settings"><p class="share-intro">Choose what visitors can see.</p><p class="share-access-note">Anyone with this link can view or save the page.</p>${this.items ? '<label class="form-field">Collection title<input name="title" required maxlength="140" value="Selected items"></label>' : `<label class="form-field">Name<span class="share-item-name">${esc(d.name)}</span></label>`}<fieldset class="share-fields"><legend>Include on the page</legend>${options.filter(([, , value]) => this.items || value).map(([key, label, value]) => `<label class="share-option"><input type="checkbox" name="fields" value="${key}" ${['brand', 'model'].includes(key) ? 'checked' : ''}><span><strong>${label}</strong><small>${this.items ? 'For selected items' : esc(value)}</small></span></label>`).join('')}</fieldset>${this.items ? this.collectionPhotos() : `<label class="form-field">Photo<select name="photoId"><option value="">No photo</option>${photos.map((photo, index) => `<option value="${esc(photo.id)}" ${index === 0 ? 'selected' : ''}>Photo ${index + 1}</option>`).join('')}</select></label>`}<label class="form-field">Public description<textarea name="description" maxlength="2000" rows="4" placeholder="Write a note for this page…"></textarea></label><label class="form-field">Link expires<select name="expiry"><option value="7">In 7 days</option><option value="30" selected>In 30 days</option><option value="90">In 90 days</option><option value="">No expiry</option></select></label><p class="share-private-note">Private notes, receipts, serial numbers, people, and locations stay hidden.</p></div><div class="share-preview-panel"><div class="share-preview-heading"><span>PAGE PREVIEW</span><span id="share-preview-status" role="status">Loading…</span></div><iframe id="share-preview" title="Public page preview" sandbox="allow-same-origin"></iframe></div></div><div class="share-form-footer">${error}<p id="share-submit-status" role="status">You can revoke the link at any time.</p><button class="button primary" type="submit">Create share link <span aria-hidden="true">↗</span></button></div></form>`}`;
+    this.dialog.innerHTML = `<div class="dialog-heading"><div><p class="share-eyebrow">${this.items ? `${this.items.length} ITEMS, ONE PAGE` : this.endpoint.startsWith('/api/collection-shares') ? 'A SHARED COLLECTION' : 'A PAGE FOR ONE ITEM'}</p><h2 id="share-title">${this.endpoint.startsWith('/api/collection-shares') ? 'Share a collection' : 'Share this item'}</h2></div><button class="icon-btn" data-share-action="close" aria-label="Close sharing">×</button></div>${this.share ? error : ''}${this.share ? this.activePage() : `<form id="share-form"><div class="share-view-tabs" role="group" aria-label="Sharing view"><button type="button" data-share-action="show-settings" aria-pressed="true" aria-controls="share-settings">Details</button><button type="button" data-share-action="show-preview" aria-pressed="false" aria-controls="share-preview-panel">Preview</button></div><div class="share-workspace"><div id="share-settings" class="share-settings"><p class="share-intro">Choose what visitors can see.</p><p class="share-access-note">Anyone with this link can view or save the page.</p>${this.items ? '<label class="form-field">Collection title<input name="title" required maxlength="140" value="Selected items"></label>' : `<label class="form-field">Name<span class="share-item-name">${esc(d.name)}</span></label>`}<fieldset class="share-fields"><legend>Include on the page</legend>${options.filter(([, , value]) => this.items || value).map(([key, label, value]) => `<label class="share-option"><input type="checkbox" name="fields" value="${key}" ${['brand', 'model'].includes(key) ? 'checked' : ''}><span><strong>${label}</strong><small>${this.items ? 'For selected items' : esc(value)}</small></span></label>`).join('')}</fieldset>${this.items ? this.collectionPhotos() : `<label class="form-field">Photo<select name="photoId"><option value="">No photo</option>${photos.map((photo, index) => `<option value="${esc(photo.id)}" ${index === 0 ? 'selected' : ''}>Photo ${index + 1}</option>`).join('')}</select></label>`}<label class="form-field">Public description<textarea name="description" maxlength="2000" rows="4" placeholder="Write a note for this page…"></textarea></label><label class="form-field">Link expires<select name="expiry"><option value="7">In 7 days</option><option value="30" selected>In 30 days</option><option value="90">In 90 days</option><option value="">No expiry</option></select></label><p class="share-private-note">Private notes, receipts, serial numbers, people, and locations stay hidden.</p></div><div id="share-preview-panel" class="share-preview-panel"><div class="share-preview-heading"><span>PAGE PREVIEW</span><span id="share-preview-status" role="status">Loading…</span></div><iframe id="share-preview" title="Public page preview" sandbox="allow-same-origin"></iframe></div></div><div class="share-form-footer">${error}<p id="share-submit-status" role="status">You can revoke the link at any time.</p><button class="button primary" type="submit">Create share link <span aria-hidden="true">↗</span></button></div></form>`}`;
   }
 
   activePage() {
@@ -143,11 +145,22 @@ export class ItemSharing {
     }
   }
 
+  showPane(pane) {
+    this.dialog.dataset.pane = pane;
+    for (const button of this.dialog.querySelectorAll('.share-view-tabs button')) {
+      button.setAttribute('aria-pressed', String(button.dataset.shareAction === `show-${pane}`));
+    }
+  }
+
   async click(event) {
     const button = event.target.closest('[data-share-action]');
     if (!button) return;
     const action = button.dataset.shareAction;
     try {
+      if (action === 'show-settings' || action === 'show-preview') {
+        this.showPane(action === 'show-preview' ? 'preview' : 'settings');
+        return;
+      }
       if (action === 'close') { if (!this.busy) this.dialog.close(); return; }
       if (action === 'collection') { await this.openSavedCollection(button.dataset.collectionId); return; }
       if (action === 'copy') {
