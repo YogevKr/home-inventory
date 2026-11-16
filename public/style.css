@@ -391,3 +391,5 @@ body[data-view=inbox] .collection-summary{display:none}
 @media(max-width:760px){.share-dialog{width:96vw;max-height:96dvh}.share-workspace{grid-template-columns:1fr}.share-settings{border-right:0;padding:22px}.share-preview-panel{padding:18px}#share-preview{height:620px;min-height:0}.share-form-footer{padding:18px;align-items:flex-start;flex-direction:column;gap:10px}.share-form-footer .button{width:100%}.share-preview-heading{font-size:9px}.share-dialog .dialog-heading{padding:20px}.share-active{padding:25px 20px}.share-item-button{padding:8px}.detail-title-row{flex-wrap:wrap}}
 
 @media(min-width:761px){#share-form{display:flex;flex-direction:column;max-height:calc(94dvh - 106px)}.share-workspace{min-height:0;overflow:auto}.share-settings{overflow-y:auto;max-height:calc(94dvh - 185px)}.share-preview-panel{height:calc(94dvh - 185px)}#share-preview{min-height:0;height:100%}.share-form-footer{flex-shrink:0}}
+
+.share-form-footer{flex-wrap:wrap}.share-form-footer .error-message{flex-basis:100%;width:100%;margin:0}

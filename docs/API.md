@@ -294,15 +294,18 @@ The preview returns `{ "html": "..." }` without creating a public link.
 Publication returns HTTP 201 with `id`, `url`, and `expiresAt`.
 A stale revision or existing active link returns HTTP 409.
 
-For a photo, send multipart form data with `data` containing the JSON above and `photo` containing a WebP file.
+For a photo, send multipart form data with `data` containing the JSON above and `photo` containing WebP or JPEG.
 Set `photoId` to an active photo attachment from that purchase. Receipts and other purchases' files are rejected.
 Re-encode the selected photo before sending it. The browser does this automatically.
-The API accepts a static WebP smaller than 1.5 MB and rejects metadata and animation chunks.
+The API accepts static WebP or JPEG files smaller than 1.5 MB.
+It rejects WebP metadata and animation chunks. It removes JPEG metadata, thumbnails, and comments before storage.
+Browsers that cannot encode WebP use JPEG. The browser preserves the actual file format and MIME type.
 It stores a separate photo copy without the original filename. It never publishes the original attachment URL.
 
 ```sh
 node scripts/inventory.mjs share ITEM_UUID < share.json
 node scripts/inventory.mjs share ITEM_UUID /path/to/clean-photo.webp < share.json
+node scripts/inventory.mjs share ITEM_UUID /path/to/photo.jpg < share.json
 node scripts/inventory.mjs share-status ITEM_UUID
 node scripts/inventory.mjs revoke-share ITEM_UUID < revoke.json
 ```

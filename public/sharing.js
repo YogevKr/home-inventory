@@ -30,9 +30,10 @@ export class ItemSharing {
 
   render() {
     const d = this.item.data;
+    const error = '<div id="share-error" class="error-message" role="alert" tabindex="-1" hidden></div>';
     const photos = this.item.attachments.filter(file => file.kind === 'photo');
     const options = [['brand', 'Brand', d.brand], ['model', 'Model', d.model], ['price', 'Price paid', d.priceMinor === null ? '' : new Intl.NumberFormat('en-US', { style: 'currency', currency: d.currency }).format(d.priceMinor / 100)], ['seller', 'Store', d.seller], ['purchaseDate', 'Purchase date', d.purchaseDate], ['productUrl', 'Product link', d.productUrl], ['tags', 'Tags', d.tags.join(', ')]];
-    this.dialog.innerHTML = `<div class="dialog-heading"><div><p class="share-eyebrow">A PAGE FOR ONE ITEM</p><h2 id="share-title">Share this item</h2></div><button class="icon-btn" data-share-action="close" aria-label="Close sharing">×</button></div><div id="share-error" class="error-message" role="alert" hidden></div>${this.share ? this.activePage() : `<form id="share-form"><div class="share-workspace"><div class="share-settings"><p class="share-intro">Choose what visitors can see.</p><p class="share-access-note">Anyone with this link can view or save the page.</p><label class="form-field">Name<span class="share-item-name">${esc(d.name)}</span></label><fieldset class="share-fields"><legend>Include on the page</legend>${options.filter(([, , value]) => value).map(([key, label, value]) => `<label class="share-option"><input type="checkbox" name="fields" value="${key}" ${['brand', 'model'].includes(key) ? 'checked' : ''}><span><strong>${label}</strong><small>${esc(value)}</small></span></label>`).join('')}</fieldset><label class="form-field">Photo<select name="photoId"><option value="">No photo</option>${photos.map((photo, index) => `<option value="${esc(photo.id)}" ${index === 0 ? 'selected' : ''}>Photo ${index + 1}</option>`).join('')}</select></label><label class="form-field">Public description<textarea name="description" maxlength="2000" rows="4" placeholder="Write a note for this page…"></textarea></label><label class="form-field">Link expires<select name="expiry"><option value="7">In 7 days</option><option value="30" selected>In 30 days</option><option value="90">In 90 days</option><option value="">No expiry</option></select></label><p class="share-private-note">Private notes, receipts, serial numbers, people, and locations stay hidden.</p></div><div class="share-preview-panel"><div class="share-preview-heading"><span>PAGE PREVIEW</span><span id="share-preview-status" role="status">Loading…</span></div><iframe id="share-preview" title="Public item page preview" sandbox="allow-same-origin"></iframe></div></div><div class="share-form-footer"><p>You can revoke the link at any time.</p><button class="button primary" type="submit">Create share link <span aria-hidden="true">↗</span></button></div></form>`}`;
+    this.dialog.innerHTML = `<div class="dialog-heading"><div><p class="share-eyebrow">A PAGE FOR ONE ITEM</p><h2 id="share-title">Share this item</h2></div><button class="icon-btn" data-share-action="close" aria-label="Close sharing">×</button></div>${this.share ? error : ''}${this.share ? this.activePage() : `<form id="share-form"><div class="share-workspace"><div class="share-settings"><p class="share-intro">Choose what visitors can see.</p><p class="share-access-note">Anyone with this link can view or save the page.</p><label class="form-field">Name<span class="share-item-name">${esc(d.name)}</span></label><fieldset class="share-fields"><legend>Include on the page</legend>${options.filter(([, , value]) => value).map(([key, label, value]) => `<label class="share-option"><input type="checkbox" name="fields" value="${key}" ${['brand', 'model'].includes(key) ? 'checked' : ''}><span><strong>${label}</strong><small>${esc(value)}</small></span></label>`).join('')}</fieldset><label class="form-field">Photo<select name="photoId"><option value="">No photo</option>${photos.map((photo, index) => `<option value="${esc(photo.id)}" ${index === 0 ? 'selected' : ''}>Photo ${index + 1}</option>`).join('')}</select></label><label class="form-field">Public description<textarea name="description" maxlength="2000" rows="4" placeholder="Write a note for this page…"></textarea></label><label class="form-field">Link expires<select name="expiry"><option value="7">In 7 days</option><option value="30" selected>In 30 days</option><option value="90">In 90 days</option><option value="">No expiry</option></select></label><p class="share-private-note">Private notes, receipts, serial numbers, people, and locations stay hidden.</p></div><div class="share-preview-panel"><div class="share-preview-heading"><span>PAGE PREVIEW</span><span id="share-preview-status" role="status">Loading…</span></div><iframe id="share-preview" title="Public item page preview" sandbox="allow-same-origin"></iframe></div></div><div class="share-form-footer">${error}<p id="share-submit-status" role="status">You can revoke the link at any time.</p><button class="button primary" type="submit">Create share link <span aria-hidden="true">↗</span></button></div></form>`}`;
   }
 
   activePage() {
@@ -62,23 +63,33 @@ export class ItemSharing {
 
   async publish() {
     if (this.busy) return;
-    this.busy = true; clearTimeout(this.timer);
     const form = this.dialog.querySelector('#share-form');
     const data = this.input();
     const item = this.item;
+    this.busy = true; clearTimeout(this.timer); this.previewId++;
+    this.dialog.querySelector('#share-error').hidden = true;
+    const button = form.querySelector('[type=submit]'), label = button.innerHTML;
+    const status = this.dialog.querySelector('#share-submit-status'), statusText = status.textContent;
+    button.textContent = 'Creating link…';
+    status.textContent = data.photoId ? 'Preparing photo…' : 'Creating your page…';
     for (const field of form.elements) field.disabled = true;
     try {
       let body, headers;
       if (data.photoId) {
         const response = await fetch(`/api/files/${encodeURIComponent(data.photoId)}`);
         if (!response.ok) throw new Error('Could not load the selected photo.');
-        const photo = await this.resize(new File([await response.blob()], 'shared-photo.webp'));
+        const source = await response.blob();
+        const photo = await this.resize(new File([source], 'shared-photo', { type: source.type }));
         body = new FormData(); body.set('data', JSON.stringify(data)); body.set('photo', photo);
       } else { body = JSON.stringify(data); headers = { 'Content-Type': 'application/json' }; }
+      status.textContent = 'Creating your page…';
       await this.read(`/api/items/${item.id}/share`, { method: 'POST', headers, body });
       this.share = (await this.read(`/api/items/${item.id}/share`)).share;
       this.previewId++; this.render(); this.toast('Share page created.');
-    } finally { this.busy = false; for (const field of form.elements) field.disabled = false; }
+    } finally {
+      this.busy = false; button.innerHTML = label; status.textContent = statusText;
+      for (const field of form.elements) field.disabled = false;
+    }
   }
 
   async click(event) {
@@ -106,5 +117,6 @@ export class ItemSharing {
     let element = this.dialog.querySelector('#share-error');
     if (!element) { element = document.createElement('p'); element.id = 'share-error'; element.className = 'error-message'; element.setAttribute('role', 'alert'); this.dialog.append(element); }
     element.textContent = error.message; element.hidden = false;
+    (element.closest('.share-form-footer') || element).scrollIntoView({ block: 'end' }); element.focus({ preventScroll: true });
   }
 }

@@ -41,7 +41,8 @@ try {
       validId(id); const data = await stdin();
       if (extra) {
         const form = new FormData(); form.set('data', JSON.stringify(data));
-        form.set('photo', new File([await readFile(extra)], 'shared-photo.webp', { type: 'image/webp' }));
+        const jpeg = /\.jpe?g$/i.test(extra);
+        form.set('photo', new File([await readFile(extra)], jpeg ? 'shared-photo.jpg' : 'shared-photo.webp', { type: jpeg ? 'image/jpeg' : 'image/webp' }));
         output(await (await request(`/api/items/${id}/share`, { method: 'POST', body: form })).json());
       } else output(await jsonRequest(`/api/items/${id}/share`, 'POST', data));
       break;
@@ -79,6 +80,6 @@ try {
       }
       output({ directory: id, items: records.items.length, files: records.attachments.length }); break;
     }
-    default: process.stdout.write('Usage: inventory.mjs list [query] | get ID | places | create < JSON | update ID < JSON | delete ID < JSON | share ID [WEBP_PATH] < JSON | share-status ID | revoke-share ID < JSON | comment ID < JSON | place < JSON | attach ID PATH [kind] | remove-file ITEM_ID FILE_ID | restore-file ITEM_ID FILE_ID | export NEW_DIRECTORY\n');
+    default: process.stdout.write('Usage: inventory.mjs list [query] | get ID | places | create < JSON | update ID < JSON | delete ID < JSON | share ID [PHOTO_PATH] < JSON | share-status ID | revoke-share ID < JSON | comment ID < JSON | place < JSON | attach ID PATH [kind] | remove-file ITEM_ID FILE_ID | restore-file ITEM_ID FILE_ID | export NEW_DIRECTORY\n');
   }
 } catch (error) { process.stderr.write(`${error.message}\n`); process.exitCode = 1; }

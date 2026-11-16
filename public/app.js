@@ -3,6 +3,7 @@ import { exportArchive } from './export.bundle.js';
 import { escapeHtml as esc, linkify } from './text.js';
 import { InboxReview } from './inbox.js';
 import { ItemSharing } from './sharing.js';
+import { resizedPhoto } from './photos.js';
 
 const $=selector=>document.querySelector(selector);
 const paths={grid:'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',box:'m3 7 9-5 9 5v10l-9 5-9-5z M3 7l9 5 9-5 M12 12v10 M7.5 4.5l9 5',pin:'M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 1 1 16 0Z M15 10a3 3 0 1 1-6 0 3 3 0 0 1 6 0',home:'m3 10 9-7 9 7v11H3z M9 21v-8h6v8',inbox:'M3 4h18v16H3z M3 13h5l2 3h4l2-3h5',clock:'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0 M12 7v5l3 2',search:'M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0 M15 15l6 6',list:'M8 5h13 M8 12h13 M8 19h13 M3 5h.01 M3 12h.01 M3 19h.01',wallet:'M3 6h17v15H3z M3 6V3h15v3 M15 11h6v5h-6z',camera:'M3 7h4l2-3h6l2 3h4v13H3z M16 13a4 4 0 1 1-8 0 4 4 0 0 1 8 0',close:'m6 6 12 12 M6 18 18 6',edit:'m4 16-1 5 5-1L20 8l-4-4z M13 7l4 4',file:'M5 2h9l5 5v15H5z M14 2v6h5 M8 13h8 M8 17h6',arrow:'M4 12h16 M14 6l6 6-6 6',check:'m5 12 4 4L19 6',archive:'M3 3h18v5H3z M5 8v13h14V8 M9 12h6',tag:'M3 3h8l10 10-8 8L3 11z M7 7h.01'};
@@ -136,13 +137,7 @@ function openEditor(item=null){
   $('#item-form').dataset.newId=crypto.randomUUID();
   $('#editor').showModal();setTimeout(()=>$('#item-form [name=name]').focus(),50);
 }
-async function resizedPhoto(file){
-  if(!file?.size)return null;
-  let bitmap;try{bitmap=await createImageBitmap(file);}catch{throw new Error('Use a JPG, PNG, WebP, or AVIF photo.');}
-  const scale=Math.min(1,1600/Math.max(bitmap.width,bitmap.height));const canvas=document.createElement('canvas');canvas.width=Math.round(bitmap.width*scale);canvas.height=Math.round(bitmap.height*scale);const ctx=canvas.getContext('2d');ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close();
-  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',.82));
-  if(!blob)throw new Error('Could not prepare this photo.');return new File([blob],`${file.name.replace(/\.[^.]+$/,'')}.webp`,{type:'image/webp'});
-}
+
 async function upload(id,file,kind){const form=new FormData();form.set('file',file);form.set('kind',kind);return api(`/api/items/${id}/attachments`,{method:'POST',body:form});}
 async function saveItem(form){
   const submit=form.querySelector('[type=submit]');submit.disabled=true;$('#form-error').hidden=true;

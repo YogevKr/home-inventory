@@ -8,7 +8,7 @@ export class ShareError extends Error {
   constructor(status: number, message: string) { super(message); this.status = status; }
 }
 const tokenFormat = /^[A-Za-z0-9_-]{43}$/;
-const photoKey = z.string().regex(/^shares\/[A-Za-z0-9_-]{43}\.webp$/);
+const photoKey = z.string().regex(/^shares\/[A-Za-z0-9_-]{43}\.(webp|jpg)$/);
 export const storedFileKey = z.union([attachmentId, photoKey]);
 const shareInput = z.object({
   revision: z.number().int().positive(), description: z.string().trim().max(2000).default(''),
@@ -41,7 +41,8 @@ export async function publicShare(request: Request, env: ShareEnv): Promise<Resp
     if (!hasPhoto || !share.photo_key) return unavailable(request.method);
     const file = await env.FILES.get(share.photo_key);
     if (!file) return unavailable(request.method);
-    return new Response(request.method === 'HEAD' ? null : file.body, { headers: { ...publicHeaders, 'Content-Type': 'image/webp', 'Content-Length': String(file.size), 'Content-Disposition': 'inline; filename="shared-photo.webp"' } });
+    const jpeg = share.photo_key.endsWith('.jpg');
+    return new Response(request.method === 'HEAD' ? null : file.body, { headers: { ...publicHeaders, 'Content-Type': jpeg ? 'image/jpeg' : 'image/webp', 'Content-Length': String(file.size), 'Content-Disposition': `inline; filename="shared-photo.${jpeg ? 'jpg' : 'webp'}"` } });
   }
   return new Response(request.method === 'HEAD' ? null : sharePage(share.snapshot, hasPhoto ? `/share/${share.token}/photo` : null), { headers: { ...publicHeaders, 'Content-Type': 'text/html; charset=utf-8' } });
 }
@@ -57,9 +58,10 @@ function snapshot(data: z.infer<typeof itemData>, input: z.infer<typeof shareInp
   });
 }
 
-async function webpPhoto(file: File): Promise<ArrayBuffer> {
-  if (file.type !== 'image/webp' || file.size > 1_500_000) throw new ShareError(400, 'Use a WebP photo smaller than 1.5 MB.');
+async function sharePhoto(file: File): Promise<{ bytes: ArrayBuffer; format: 'webp' | 'jpg' }> {
+  if (!['image/webp', 'image/jpeg'].includes(file.type) || file.size > 1_500_000) throw new ShareError(400, 'Use a WebP or JPEG photo smaller than 1.5 MB.');
   const bytes = await file.arrayBuffer();
+  if (file.type === 'image/jpeg') return { bytes: await jpegWithoutMetadata(bytes), format: 'jpg' };
   if (bytes.byteLength < 20) throw new ShareError(400, 'Invalid WebP photo.');
   const view = new DataView(bytes);
   const word = (offset: number) => String.fromCharCode(...new Uint8Array(bytes, offset, 4));
@@ -74,7 +76,51 @@ async function webpPhoto(file: File): Promise<ArrayBuffer> {
     offset += 8 + size + (size % 2);
   }
   if (offset !== bytes.byteLength || images !== 1) throw new ShareError(400, 'Invalid WebP photo.');
-  return bytes;
+  return { bytes, format: 'webp' };
+}
+
+async function jpegWithoutMetadata(bytes: ArrayBuffer): Promise<ArrayBuffer> {
+  const data = new Uint8Array(bytes), view = new DataView(bytes);
+  const invalid = () => new ShareError(400, 'Invalid JPEG photo.');
+  if (data.length < 4 || data[0] !== 0xff || data[1] !== 0xd8) throw invalid();
+  const parts: ArrayBuffer[] = [bytes.slice(0, 2)];
+  let offset = 2, frame = false, scan = false;
+  while (offset < data.length) {
+    const start = offset;
+    if (data[offset++] !== 0xff) throw invalid();
+    while (offset < data.length && view.getUint8(offset) === 0xff) offset++;
+    if (offset >= data.length) throw invalid();
+    const marker = view.getUint8(offset++);
+    if (marker === 0xd9) {
+      if (!frame || !scan || offset !== data.length) throw invalid();
+      parts.push(bytes.slice(start, offset));
+      return new Blob(parts).arrayBuffer();
+    }
+    if (offset + 2 > data.length) throw invalid();
+    const size = view.getUint16(offset);
+    if (size < 2 || offset + size > data.length) throw invalid();
+    offset += size;
+    if ((marker >= 0xe0 && marker <= 0xef) || marker === 0xfe) continue;
+    if (![0xc0, 0xc2, 0xc4, 0xdb, 0xdd, 0xda].includes(marker)) throw invalid();
+    if (marker === 0xc0 || marker === 0xc2) {
+      if (frame) throw invalid();
+      frame = true;
+    }
+    parts.push(bytes.slice(start, offset));
+    if (marker !== 0xda) continue;
+    if (!frame) throw invalid();
+    scan = true;
+    const scanStart = offset;
+    while (offset + 1 < data.length) {
+      if (data[offset] !== 0xff) { offset++; continue; }
+      const next = view.getUint8(offset + 1);
+      if (next === 0x00 || (next >= 0xd0 && next <= 0xd7)) { offset += 2; continue; }
+      if (next === 0xff) { offset++; continue; }
+      break;
+    }
+    parts.push(bytes.slice(scanStart, offset));
+  }
+  throw invalid();
 }
 
 export async function manageShare(request: Request, env: ShareEnv, id: z.infer<typeof itemId>, preview: boolean): Promise<Response> {
@@ -123,14 +169,14 @@ export async function manageShare(request: Request, env: ShareEnv, id: z.infer<t
   if (input.expiresAt && input.expiresAt <= new Date().toISOString()) throw new ShareError(400, 'Choose a future expiry date.');
   const data = snapshot(item.data, input);
   if (preview) return json({ html: sharePage(data, input.photoId ? `/api/files/${input.photoId}` : null) });
-  if (Boolean(input.photoId) !== Boolean(photo)) throw new ShareError(400, 'Send the selected photo as a metadata-free WebP file.');
+  if (Boolean(input.photoId) !== Boolean(photo)) throw new ShareError(400, 'Send the selected photo as a WebP or JPEG file.');
   if (await env.DB.prepare('SELECT id FROM item_shares WHERE item_id=? AND revoked_at IS NULL').bind(id).first()) throw new ShareError(409, 'Revoke the existing link before creating another.');
-  const bytes = photo ? await webpPhoto(photo) : null;
+  const image = photo ? await sharePhoto(photo) : null;
   const token = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-  const key = bytes ? `shares/${token}.webp` : null;
+  const key = image ? `shares/${token}.${image.format}` : null;
   const shareId = crypto.randomUUID();
   const expiresAt = input.expiresAt;
-  if (key && bytes) await env.FILES.put(key, bytes, { httpMetadata: { contentType: 'image/webp' } });
+  if (key && image) await env.FILES.put(key, image.bytes, { httpMetadata: { contentType: image.format === 'jpg' ? 'image/jpeg' : 'image/webp' } });
   try {
     const result = await env.DB.prepare('INSERT INTO item_shares(id,item_id,token,snapshot,photo_key,source_photo_id,expires_at) SELECT ?,id,?,?,?,?,? FROM items WHERE id=? AND revision=? AND NOT EXISTS(SELECT 1 FROM item_shares WHERE item_id=? AND revoked_at IS NULL)').bind(shareId, token, JSON.stringify(data), key, input.photoId, expiresAt, id, input.revision, id).run();
     if (!result.meta.changes) throw new ShareError(409, 'The item or share changed. Reload before sharing.');

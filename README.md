@@ -92,7 +92,7 @@ An external agent can collect purchase details and submit them through the API.
 No scheduled jobs, containers, or continuously running server are required.
 Idle deployments consume storage. Account subscriptions, domain registration, and storage above included allowances can still incur charges.
 Traffic adds Worker, D1, and R2 operations. Free allowances depend on your account and plan.
-Browser uploads resize photos to 1,600 pixels and encode WebP to reduce storage.
+Browser uploads resize photos to 1,600 pixels and encode WebP, with JPEG fallback for browsers without WebP encoding.
 
 Check current pricing for [Workers](https://developers.cloudflare.com/workers/platform/pricing/),
 [D1](https://developers.cloudflare.com/d1/platform/pricing/),

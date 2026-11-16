@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { setTimeout } from 'node:timers/promises';
 import worker from '../src/index.ts';
 import { spawn } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
 
 const base = process.env.TEST_URL || 'http://127.0.0.1:8787';
 if (!/^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(base)) throw new Error('Tests require a local server.');
@@ -31,11 +32,11 @@ async function attach(item, kind = 'photo') {
   assert.equal(response.status, 201);
   return (await response.json()).attachments.at(-1).id;
 }
-async function publish(item, input = {}, bytes = null) {
+async function publish(item, input = {}, bytes = null, type = 'image/webp') {
   const data = { revision: item.revision, ...input };
   if (!bytes) return call(`/api/items/${item.id}/share`, data, 'POST');
   const form = new FormData(); form.set('data', JSON.stringify(data));
-  form.set('photo', new File([bytes], 'photo.webp', { type: 'image/webp' }));
+  form.set('photo', new File([bytes], 'photo', { type }));
   return fetch(`${base}/api/items/${item.id}/share`, { method: 'POST', body: form });
 }
 
@@ -130,6 +131,35 @@ test('shared photos exclude receipts, other items, metadata, private names, and 
   assert.equal((await fetch(share.url + '/photo')).status, 404);
 });
 
+test('Safari JPEG shares remove metadata and support revocation and item deletion', async () => {
+  const item = await create(), photoId = await attach(item);
+  const jpeg = await readFile(new URL('./fixtures/safari-canvas.jpg', import.meta.url));
+  assert.ok(jpeg.includes(Buffer.from('Exif')));
+  assert.ok(jpeg.includes(Buffer.from('Photoshop')));
+  const privateMetadata = Buffer.from('PRIVATE_GPS_LOCATION');
+  const segment = Buffer.alloc(4); segment[0] = 0xff; segment[1] = 0xe1; segment.writeUInt16BE(privateMetadata.length + 2, 2);
+  const withMetadata = Buffer.concat([jpeg.subarray(0, 2), segment, privateMetadata, jpeg.subarray(2)]);
+  assert.equal((await publish(item, { photoId }, jpeg)).status, 400);
+  for (const invalid of [jpeg.subarray(0, -2), Buffer.concat([jpeg, privateMetadata]), Buffer.from([0xff, 0xd8, 0xff, 0xff])]) {
+    assert.equal((await publish(item, { photoId }, invalid, 'image/jpeg')).status, 400);
+  }
+  const created = await publish(item, { photoId }, withMetadata, 'image/jpeg');
+  assert.equal(created.status, 201);
+  const share = await created.json(), response = await fetch(share.url + '/photo');
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('content-type'), 'image/jpeg');
+  assert.equal(response.headers.get('content-disposition'), 'inline; filename="shared-photo.jpg"');
+  const published = Buffer.from(await response.arrayBuffer());
+  for (const marker of ['Exif', 'Photoshop', 'PRIVATE_GPS_LOCATION']) assert.ok(!published.includes(Buffer.from(marker)));
+  assert.equal(published.readUInt16BE(0), 0xffd8);
+  assert.equal(published.readUInt16BE(published.length - 2), 0xffd9);
+  assert.equal((await call(`/api/items/${item.id}/share`, { id: share.id }, 'DELETE')).status, 200);
+  assert.equal((await fetch(share.url + '/photo')).status, 404);
+  const replacement = await (await publish(item, { photoId }, jpeg, 'image/jpeg')).json();
+  assert.equal((await call(`/api/items/${item.id}`, { revision: item.revision }, 'DELETE')).status, 200);
+  assert.equal((await fetch(replacement.url + '/photo')).status, 404);
+});
+
 test('public routing cannot bypass authentication for the collection or API', async () => {
   const env = { DEV_AUTH: 'false', AUTH_ISSUER: '', AUTH_AUDIENCE: '' };
   for (const path of ['/', '/api/bootstrap', '/api/items', `/api/items/${randomUUID()}/share`, '/app.js', '/share-page.css', '/api/files/' + randomUUID()]) {
@@ -145,8 +175,8 @@ test('public routing cannot bypass authentication for the collection or API', as
 
 test('agents can create, retrieve, and revoke share links through the CLI', async () => {
   const item = await create();
-  const cli = (command, data) => new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ['scripts/inventory.mjs', command, item.id], {
+  const cli = (command, data, extra = []) => new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ['scripts/inventory.mjs', command, item.id, ...extra], {
       env: { ...process.env, INVENTORY_URL: base }, stdio: ['pipe', 'pipe', 'pipe'],
     });
     let output = '', errors = '';
@@ -162,4 +192,8 @@ test('agents can create, retrieve, and revoke share links through the CLI', asyn
   assert.equal((await fetch(created.url)).status, 200);
   assert.deepEqual(await cli('revoke-share', { id: created.id }), { revoked: true });
   assert.equal((await fetch(created.url)).status, 404);
+  const photoId = await attach(item);
+  const jpegShare = await cli('share', { revision: item.revision, photoId }, ['tests/fixtures/safari-canvas.jpg']);
+  assert.equal((await fetch(jpegShare.url + '/photo')).headers.get('content-type'), 'image/jpeg');
+  assert.deepEqual(await cli('revoke-share', { id: jpegShare.id }), { revoked: true });
 });
