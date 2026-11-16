@@ -47,6 +47,12 @@ export default {
     try {
       const url = new URL(request.url);
       const path = url.pathname;
+      if (['/llms.txt','/llm.txt','/llms-full.txt'].includes(path)) {
+        const headers = { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=300', 'X-Content-Type-Options': 'nosniff' };
+        if (!['GET','HEAD'].includes(request.method)) return new Response('Method not allowed.', { status: 405, headers: { ...headers, Allow: 'GET, HEAD' } });
+        const asset = await env.ASSETS.fetch(new Request(new URL(path === '/llm.txt' ? '/llms.txt' : path, url), { method: request.method }));
+        return new Response(request.method === 'HEAD' ? null : asset.body, { status: asset.status, headers });
+      }
       if (path.startsWith('/share/collection/')) return await publicCollection(request,env);
       if (path === '/share' || path.startsWith('/share/')) return await publicShare(request,env);
       const actor = await authenticate(request,env);
@@ -69,7 +75,7 @@ export default {
           env.DB.prepare('SELECT id,name,parent_id FROM locations ORDER BY name COLLATE NOCASE').all(),
           env.DB.prepare("SELECT status,COUNT(*) AS count FROM items GROUP BY status").all(),
           env.DB.prepare("SELECT json_extract(data,'$.currency') AS currency,SUM(json_extract(data,'$.priceMinor')*json_extract(data,'$.quantity')) AS total FROM items WHERE status IN ('active','inbox','lent') GROUP BY currency").all(),
-          env.DB.prepare("SELECT DISTINCT j.value AS name FROM items i,json_each(i.data,'$.tags') j WHERE i.status!='archived' ORDER BY name").all(),
+          env.DB.prepare("SELECT j.value AS name,SUM(i.status='wishlist') AS wishlistCount FROM items i,json_each(i.data,'$.tags') j WHERE i.status!='archived' GROUP BY j.value ORDER BY name").all(),
         ]);
         return json({ actor, locations: locations.results, counts: counts.results, values: values.results, tags: tags.results, priceReference });
       }

@@ -17,6 +17,10 @@ async def main():
         api = await p.request.new_context(base_url=origin)
         items, errors = [], []
         try:
+            owned_tag = 'Owned only ' + uuid4().hex[:8]
+            owned = await api.post('/api/items', data={'data': {'name': owned_tag, 'tags': [owned_tag]}})
+            assert owned.status == 201
+            items.append((await owned.json())['id'])
             for device, options in [
                 ('desktop', {'viewport': {'width': 1280, 'height': 1000}}),
                 ('narrow', {'viewport': {'width': 320, 'height': 700}, 'is_mobile': True, 'has_touch': True}),
@@ -29,6 +33,7 @@ async def main():
                 await page.goto(origin)
                 await page.get_by_role('button', name='Wishlist', exact=True).click()
                 await expect(page.locator('#title')).to_have_text('Your wishlist.')
+                await expect(page.locator('.filter-row').get_by_role('button', name=owned_tag, exact=True)).to_have_count(0)
                 await expect(page.locator('.collection-summary')).not_to_be_visible()
                 await expect(page.locator('#sort option[value="purchaseDate:desc"]')).to_have_count(0)
                 await page.locator('.page-heading').get_by_role('button', name='Add to wishlist').click()
@@ -36,6 +41,7 @@ async def main():
                 await expect(form.get_by_role('combobox', name='Status', exact=True)).to_have_value('wishlist')
                 await expect(form.get_by_label('Purchase date', exact=True)).not_to_be_visible()
                 await form.get_by_label('Item name *', exact=True).fill(name)
+                await form.get_by_label('Tags', exact=True).fill(name)
                 await form.get_by_label('Description', exact=True).fill('Choose the warm light version.')
                 await form.get_by_label('Store', exact=True).fill('Example store')
                 await form.get_by_label('Expected price per item', exact=True).fill('89.00')
@@ -48,6 +54,9 @@ async def main():
                 assert result['total'] == 1
                 item = result['items'][0]
                 items.append(item['id'])
+                tag_button = page.locator('.filter-row').get_by_role('button', name=name, exact=True)
+                await expect(tag_button).to_be_visible()
+                await tag_button.click()
                 await page.get_by_role('searchbox', name='Search items').fill(name)
                 await expect(page.locator('.item-card')).to_have_count(1)
                 await expect(page.locator('.card-name')).to_have_text(name)
@@ -98,10 +107,12 @@ async def main():
                 assert current['attachments'][0]['kind'] == 'photo'
                 await page.get_by_role('button', name='Close details', exact=True).click()
                 await expect(page.locator('.item-card')).to_have_count(0)
+                await expect(page.locator('.filter-row').get_by_role('button', name=name, exact=True)).to_have_count(0)
+                await expect(page.locator('.filter-row').get_by_role('button', name='All items', exact=True)).to_have_attribute('aria-pressed', 'true')
                 await page.get_by_role('button', name='Collection', exact=True).click()
                 await page.get_by_role('searchbox', name='Search items').fill(name)
                 await expect(page.locator('.card-name')).to_have_text(name)
-                print(f'PASS {device}: create, photo, layout, purchase cancellation, conversion, and retained details', flush=True)
+                print(f'PASS {device}: wishlist tags, create, photo, layout, purchase cancellation, conversion, and retained details', flush=True)
                 await context.close()
             assert not errors, errors
         finally:

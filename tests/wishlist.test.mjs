@@ -104,3 +104,21 @@ test('wishlist filters and price pagination use only wishlist entries', async ()
     assert.deepEqual(actual, names);
   }
 });
+
+test('wishlist tag counts exclude owned and archived records and follow status changes', async () => {
+  const prefix = randomUUID().slice(0, 8);
+  const shared = `${prefix} shared`, ownedOnly = `${prefix} owned`, archivedOnly = `${prefix} archive`;
+  const first = (await call('/api/items', { data: { name: prefix, status: 'wishlist', tags: [shared] } }, 'POST')).body;
+  const second = (await call('/api/items', { data: { name: prefix, status: 'wishlist', tags: [shared] } }, 'POST')).body;
+  await call('/api/items', { data: { name: prefix, tags: [shared, ownedOnly] } }, 'POST');
+  await call('/api/items', { data: { name: prefix, status: 'archived', tags: [archivedOnly] } }, 'POST');
+  const counts = async () => new Map((await call('/api/bootstrap')).body.tags.map(tag => [tag.name, tag.wishlistCount]));
+  let tags = await counts();
+  assert.equal(tags.get(shared), 2);
+  assert.equal(tags.get(ownedOnly), 0);
+  assert.equal(tags.has(archivedOnly), false);
+  await call(`/api/items/${first.id}`, { revision: first.revision, data: { ...first.data, status: 'active' } }, 'PUT');
+  assert.equal((await counts()).get(shared), 1);
+  await call(`/api/items/${second.id}`, { revision: second.revision, data: { ...second.data, status: 'archived' } }, 'PUT');
+  assert.equal((await counts()).get(shared), 0);
+});

@@ -161,3 +161,22 @@ Set `TEST_URL` to use another localhost port. The script rejects remote hosts.
 
 Run `TEST_URL=http://127.0.0.1:8806 python3 scripts/verify-price-tracking-browser.py` to check price history and mobile controls.
 Run `python3 scripts/verify-wishlist-browser.py` to check wishlist entry, purchase conversion, cancellation, and mobile layouts.
+
+## Agent guide
+
+Agents can start at `/llms.txt`. `/llm.txt` returns the same guide.
+The guide explains authentication, wishlist status, price checks, safe retries, and purchase updates.
+`/llms-full.txt` provides the full API reference. The build copies it from `docs/API.md` to prevent outdated copies.
+
+Create a separate Cloudflare Access application with a Bypass policy for Everyone on these exact paths:
+
+- `YOUR_HOSTNAME/llms.txt`
+- `YOUR_HOSTNAME/llm.txt`
+- `YOUR_HOSTNAME/llms-full.txt`
+
+Do not use a hostname-wide bypass or a path wildcard. Keep the inventory application and API behind Access.
+The Worker serves only these documents before authentication and rejects writes to their paths.
+After deployment, verify anonymous document reads and confirm that `/api/bootstrap`, `/api/export`, and `/app.js` still require authentication.
+
+Wishlist tag controls include only tags used by wishlist items. Counts cover the complete wishlist, including unloaded pages.
+When the last item leaves a selected tag, the view returns to All items.

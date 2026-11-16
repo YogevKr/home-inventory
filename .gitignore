@@ -1,4 +1,5 @@
 node_modules
+public/llms-full.txt
 .cloudflare/
 .wrangler/
 dist/
