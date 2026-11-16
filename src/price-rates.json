@@ -1,0 +1,11 @@
+{
+  "currency": "USD",
+  "date": "2026-11-13",
+  "source": "https://api.frankfurter.dev/v1/2026-11-13?base=USD&symbols=ILS,EUR,GBP",
+  "rates": {
+    "USD": 1,
+    "EUR": 0.90481,
+    "GBP": 0.75605,
+    "ILS": 3.2107
+  }
+}

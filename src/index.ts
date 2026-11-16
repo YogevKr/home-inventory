@@ -3,6 +3,7 @@ import { authenticate, type AuthEnv } from './auth.ts';
 import { itemId, attachmentId, itemData, itemCreate, itemUpdate, itemRow, itemColumns, locationId, locationInput, type ItemId } from './domain.ts';
 import { groupPurchases, productKey, purchaseSummary } from './purchases.ts';
 import { inboxReview, reviewInbox } from './inbox.ts';
+import { priceInUsd, priceOrderSql, priceReference } from './prices.ts';
 
 interface Env extends AuthEnv { DB: D1Database; FILES: R2Bucket; ASSETS: Fetcher }
 class HttpError extends Error { constructor(public status: number, message: string) { super(message); } }
@@ -60,7 +61,7 @@ export default {
           env.DB.prepare("SELECT json_extract(data,'$.currency') AS currency,SUM(json_extract(data,'$.priceMinor')*json_extract(data,'$.quantity')) AS total FROM items WHERE status!='archived' GROUP BY currency").all(),
           env.DB.prepare("SELECT DISTINCT j.value AS name FROM items i,json_each(i.data,'$.tags') j WHERE i.status!='archived' ORDER BY name").all(),
         ]);
-        return json({ actor, locations: locations.results, counts: counts.results, values: values.results, tags: tags.results });
+        return json({ actor, locations: locations.results, counts: counts.results, values: values.results, tags: tags.results, priceReference });
       }
       if (path === '/api/inbox/review' && request.method === 'POST') {
         const input = inboxReview.parse(await jsonBody(request));
@@ -94,20 +95,20 @@ export default {
           recent: `i.updated_at ${direction},i.id`,
           name: `i.name COLLATE NOCASE ${direction},i.id`,
           purchaseDate: `NULLIF(json_extract(i.data,'$.purchaseDate'),'') IS NULL, json_extract(i.data,'$.purchaseDate') ${direction},i.id`,
-          price: `json_extract(i.data,'$.priceMinor') IS NULL,json_extract(i.data,'$.currency'),json_extract(i.data,'$.priceMinor') ${direction},i.id`,
+          price: priceOrderSql(direction),
         }[sort];
         if (photo === 'missing' && grouping === 'none') conditions.push("NOT EXISTS(SELECT 1 FROM attachments a WHERE a.item_id=i.id AND a.kind='photo' AND a.removed_at IS NULL)");
         const where = conditions.join(' AND ');
         if (grouping === 'product') {
           const rows = await env.DB.prepare(`SELECT ${itemColumns},(SELECT id FROM attachments a WHERE a.item_id=i.id AND kind='photo' AND removed_at IS NULL ORDER BY created_at,id LIMIT 1) AS photo_id FROM items i WHERE ${where} ORDER BY ${order}`).bind(...params).all();
           const groups = groupPurchases(rows.results.map(row => itemRow.parse(row))).filter(group => photo !== 'missing' || !group.photo_id);
-          return json({ items: groups.slice(offset, offset + limit), total: groups.length, recordTotal: groups.reduce((sum, group) => sum + group.purchaseCount, 0), offset, limit });
+          return json({ items: groups.slice(offset, offset + limit).map(item => ({ ...item, sortPriceMinor: priceInUsd(item.data) })), total: groups.length, recordTotal: groups.reduce((sum, group) => sum + group.purchaseCount, 0), offset, limit, priceReference });
         }
         const [rows,total] = await Promise.all([
           env.DB.prepare(`SELECT ${itemColumns},(SELECT id FROM attachments a WHERE a.item_id=i.id AND kind='photo' AND removed_at IS NULL ORDER BY created_at,id LIMIT 1) AS photo_id FROM items i WHERE ${where} ORDER BY ${order} LIMIT ? OFFSET ?`).bind(...params,limit,offset).all(),
           env.DB.prepare(`SELECT COUNT(*) AS count FROM items i WHERE ${where}`).bind(...params).first<{count:number}>(),
         ]);
-        return json({ items:rows.results.map(row=>itemRow.parse(row)),total:total?.count ?? 0,offset,limit });
+        return json({ items:rows.results.map(row=>{const item=itemRow.parse(row);return {...item,sortPriceMinor:priceInUsd(item.data)};}),total:total?.count ?? 0,offset,limit,priceReference });
       }
       if (path === '/api/items' && request.method === 'POST') {
         const input = itemCreate.parse(await jsonBody(request));

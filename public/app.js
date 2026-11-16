@@ -6,7 +6,7 @@ import { InboxReview } from './inbox.js';
 const $=selector=>document.querySelector(selector);
 const paths={grid:'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',box:'m3 7 9-5 9 5v10l-9 5-9-5z M3 7l9 5 9-5 M12 12v10 M7.5 4.5l9 5',pin:'M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 1 1 16 0Z M15 10a3 3 0 1 1-6 0 3 3 0 0 1 6 0',home:'m3 10 9-7 9 7v11H3z M9 21v-8h6v8',inbox:'M3 4h18v16H3z M3 13h5l2 3h4l2-3h5',clock:'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0 M12 7v5l3 2',search:'M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0 M15 15l6 6',list:'M8 5h13 M8 12h13 M8 19h13 M3 5h.01 M3 12h.01 M3 19h.01',wallet:'M3 6h17v15H3z M3 6V3h15v3 M15 11h6v5h-6z',camera:'M3 7h4l2-3h6l2 3h4v13H3z M16 13a4 4 0 1 1-8 0 4 4 0 0 1 8 0',close:'m6 6 12 12 M6 18 18 6',edit:'m4 16-1 5 5-1L20 8l-4-4z M13 7l4 4',file:'M5 2h9l5 5v15H5z M14 2v6h5 M8 13h8 M8 17h6',arrow:'M4 12h16 M14 6l6 6-6 6',check:'m5 12 4 4L19 6',archive:'M3 3h18v5H3z M5 8v13h14V8 M9 12h6',tag:'M3 3h8l10 10-8 8L3 11z M7 7h.01'};
 const icon=name=>`<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[name]||paths.box}"/></svg>`;
-const state={sample:new URLSearchParams(location.search).get('sample')==='1',view:'items',location:null,tag:'',query:'',purchaseFor:'',sort:'purchaseDate',direction:'desc',noPhoto:false,layout:'grid',items:[],total:0,recordTotal:0,purchases:[],bootstrap:null,selected:null,tab:'overview',editing:null,requestId:0};
+const state={sample:new URLSearchParams(location.search).get('sample')==='1',view:'items',location:null,tag:'',query:'',purchaseFor:'',sort:'purchaseDate',direction:'desc',noPhoto:false,layout:'grid',items:[],total:0,recordTotal:0,purchases:[],bootstrap:null,selected:null,tab:'overview',editing:null,requestId:0,itemsLoading:false,itemsQuery:null,itemsPriceReference:null,priceReference:null};
 let debounce,toastTimeout;
 const money=(minor,currency='ILS')=>minor===null?'—':new Intl.NumberFormat('en-IL',{style:'currency',currency,maximumFractionDigits:minor%100===0?0:2}).format(minor/100);
 const date=value=>value?new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'short',year:'numeric'}).format(new Date(value)):'—';
@@ -32,50 +32,69 @@ function renderChrome(){
   $('#summary').innerHTML=`<div class="stat"><div class="stat-icon">${icon('box')}</div><div><div class="stat-number">${collectionCount()}</div><div class="stat-label">Items recorded</div></div><div class="stat-note">All in one place</div></div><div class="stat"><div class="stat-icon">${icon('home')}</div><div><div class="stat-number">${locations().length}</div><div class="stat-label">Places to find them</div></div></div><div class="stat"><div class="stat-icon">${icon('wallet')}</div><div><div class="stat-number ${values.length>1?'currency-list':''}">${amount}</div><div class="stat-label">Recorded purchase value</div></div></div>`;
 }
 const sortOptions=[['recent','desc','Updated: newest'],['recent','asc','Updated: oldest'],['name','asc','Name: A to Z'],['name','desc','Name: Z to A'],['purchaseDate','desc','Purchased: newest'],['purchaseDate','asc','Purchased: oldest'],['price','asc','Price: low to high'],['price','desc','Price: high to low']];
+const sortPrice=item=>item.data.priceMinor===null?null:item.sortPriceMinor??Math.round(item.data.priceMinor/state.priceReference.rates[item.data.currency]);
 function sampleOrder(a,b){
   const direction=state.direction==='asc'?1:-1;
   let compared=0;
   if(state.sort==='price'){
     compared=Number(a.data.priceMinor===null)-Number(b.data.priceMinor===null);
-    if(!compared)compared=a.data.currency.localeCompare(b.data.currency);
-    if(!compared)compared=(a.data.priceMinor-b.data.priceMinor)*direction;
+    if(!compared)compared=(sortPrice(a)-sortPrice(b))*direction;
   }else if(state.sort==='purchaseDate'){
     compared=Number(!a.data.purchaseDate)-Number(!b.data.purchaseDate);
     if(!compared)compared=a.data.purchaseDate.localeCompare(b.data.purchaseDate)*direction;
   }else compared=(state.sort==='name'?a.data.name.localeCompare(b.data.name):a.updated_at.localeCompare(b.updated_at))*direction;
   return compared||a.id.localeCompare(b.id);
 }
-function renderToolbar(){return `<div class="toolbar"><label class="search">${icon('search')}<input id="search" type="search" placeholder="Search your things…" value="${esc(state.query)}" aria-label="Search items"><kbd>/</kbd></label><div class="filter-row" role="group" aria-label="Filter by tag"><button class="chip ${!state.tag?'active':''}" data-tag="" aria-pressed="${!state.tag}">All items</button>${tags().map(tag=>`<button class="chip ${state.tag===tag?'active':''}" data-tag="${esc(tag)}" aria-pressed="${state.tag===tag}">${esc(tag)}</button>`).join('')}</div><div class="toolbar-right"><select id="sort" class="sort-select" aria-label="Sort items">${sortOptions.map(([sort,direction,label])=>`<option value="${sort}:${direction}" ${state.sort===sort&&state.direction===direction?'selected':''}>${label}</option>`).join('')}</select><div class="view-toggle" role="group" aria-label="Collection view"><button data-layout="grid" class="${state.layout==='grid'?'selected':''}" aria-label="Grid view" aria-pressed="${state.layout==='grid'}">${icon('grid')}</button><button data-layout="list" class="${state.layout==='list'?'selected':''}" aria-label="List view" aria-pressed="${state.layout==='list'}">${icon('list')}</button></div></div></div><div class="collection-meta"><div class="filter-controls"><button class="chip ${state.noPhoto?'active':''}" data-action="no-photo" aria-pressed="${state.noPhoto}">${icon('camera')} No photo</button><div class="purchase-filter" role="group" aria-label="Who purchases are for">${[['','Everyone'],['self','For me'],['other','For others']].map(([value,label])=>`<button class="chip ${state.purchaseFor===value?'active':''}" data-purchase-for="${value}" aria-pressed="${state.purchaseFor===value}">${label}</button>`).join('')}</div></div><span class="result-count" role="status">${state.total} product${state.total===1?'':'s'} · ${state.recordTotal} purchase${state.recordTotal===1?'':'s'}</span>${state.location?'<button class="text-button" data-action="clear-location">Clear place ×</button>':''}</div>${state.sort==='price'?'<p class="sort-hint">Prices sort within each currency. Unknown prices appear last.</p>':state.sort==='purchaseDate'?'<p class="sort-hint">Unknown dates appear last.</p>':''}`;}
+function renderToolbar(){return `<div class="toolbar"><label class="search">${icon('search')}<input id="search" type="search" placeholder="Search your things…" value="${esc(state.query)}" aria-label="Search items"><kbd>/</kbd></label><div class="filter-row" role="group" aria-label="Filter by tag"><button class="chip ${!state.tag?'active':''}" data-tag="" aria-pressed="${!state.tag}">All items</button>${tags().map(tag=>`<button class="chip ${state.tag===tag?'active':''}" data-tag="${esc(tag)}" aria-pressed="${state.tag===tag}">${esc(tag)}</button>`).join('')}</div><div class="toolbar-right"><select id="sort" class="sort-select" aria-label="Sort items">${sortOptions.map(([sort,direction,label])=>`<option value="${sort}:${direction}" ${state.sort===sort&&state.direction===direction?'selected':''}>${label}</option>`).join('')}</select><div class="view-toggle" role="group" aria-label="Collection view"><button data-layout="grid" class="${state.layout==='grid'?'selected':''}" aria-label="Grid view" aria-pressed="${state.layout==='grid'}">${icon('grid')}</button><button data-layout="list" class="${state.layout==='list'?'selected':''}" aria-label="List view" aria-pressed="${state.layout==='list'}">${icon('list')}</button></div></div></div><div class="collection-meta"><div class="filter-controls"><button class="chip ${state.noPhoto?'active':''}" data-action="no-photo" aria-pressed="${state.noPhoto}">${icon('camera')} No photo</button><div class="purchase-filter" role="group" aria-label="Who purchases are for">${[['','Everyone'],['self','For me'],['other','For others']].map(([value,label])=>`<button class="chip ${state.purchaseFor===value?'active':''}" data-purchase-for="${value}" aria-pressed="${state.purchaseFor===value}">${label}</button>`).join('')}</div></div><span class="result-count" role="status">${state.itemsLoading?'Loading items…':`${state.total} product${state.total===1?'':'s'} · ${state.recordTotal} purchase${state.recordTotal===1?'':'s'}`}</span>${state.location?'<button class="text-button" data-action="clear-location">Clear place ×</button>':''}</div>${state.sort==='price'?`<p class="sort-hint">Prices compare in USD. Reference rates: ${date(state.priceReference.date)}. Original prices appear below. Unknown prices appear last.</p>`:state.sort==='purchaseDate'?'<p class="sort-hint">Unknown dates appear last.</p>':''}`;}
 function groupPrice(item){
-  if(state.sort==='price'||!item.purchases||item.purchases.length<2)return item.data.priceMinor===null?'Price not set':money(item.data.priceMinor,item.data.currency);
+  if(state.sort==='price')return item.data.priceMinor===null?'Price not set':(item.data.currency===state.priceReference.currency?'':'≈ ')+money(sortPrice(item),state.priceReference.currency);
+  if(!item.purchases||item.purchases.length<2)return item.data.priceMinor===null?'Price not set':money(item.data.priceMinor,item.data.currency);
   const prices=item.purchases.filter(p=>p.priceMinor!==null);
   if(!prices.length)return 'Price not set';
   if(prices.length!==item.purchases.length||new Set(prices.map(p=>p.currency)).size>1)return 'Prices vary';
   const low=Math.min(...prices.map(p=>p.priceMinor)),high=Math.max(...prices.map(p=>p.priceMinor));
   return low===high?money(low,prices[0].currency):'From '+money(low,prices[0].currency);
 }
-function card(item,index){const d=item.data;const place=new Set(item.purchases?.map(p=>p.locationId)).size>1?'Multiple places':locationPath(d.locationId).split(' / ').slice(-2).join(' · ');return `<button class="item-card" data-item="${esc(item.id)}" aria-label="Open ${esc(d.name)}"><div class="card-photo">${item.art?`<img src="/art/${item.art}.svg" alt="Sample ${item.art}" loading="lazy">`:item.photo_id?`<img src="/api/files/${esc(item.photo_id)}" alt="${esc(d.name)}" loading="lazy">`:`<div class="placeholder-art">${icon('camera')}<span>No photo</span></div>`}<div class="card-topline"><span class="item-number">${String(index+1).padStart(2,'0')}</span>${d.status==='inbox'?'<span class="tag-label">Needs details</span>':''}</div><span class="card-arrow">${icon('arrow')}</span></div><div class="card-body"><div class="card-title-row"><h2 class="card-name">${esc(d.name)}</h2><span class="price ${d.priceMinor===null?'price-unset':''}">${esc(groupPrice(item))}</span></div>${item.purchaseCount>1?`<span class="purchase-badge">${item.purchaseCount} purchases · ${item.totalQuantity} units recorded</span>`:''}<p class="card-brand">${esc(d.brand||d.model||'')}</p>${state.sort==='purchaseDate'?`<p class="card-sort-value">Purchased: ${date(d.purchaseDate)}</p>`:''}${new Set(item.purchases?.map(p=>JSON.stringify(p.purchaseFor))).size>1?'<span class="recipient-badge">Recipients vary</span>':d.purchaseFor?.kind==='other'?`<span class="recipient-badge">${esc(d.purchaseFor.recipient?`For ${d.purchaseFor.recipient}`:'For someone else')}</span>`:''}<div class="card-location">${icon('pin')}<span>${esc(place)}</span></div></div></button>`;}
+function card(item,index){const d=item.data;const place=new Set(item.purchases?.map(p=>p.locationId)).size>1?'Multiple places':locationPath(d.locationId).split(' / ').slice(-2).join(' · ');return `<button class="item-card" data-item="${esc(item.id)}" aria-label="Open ${esc(d.name)}"><div class="card-photo">${item.art?`<img src="/art/${item.art}.svg" alt="Sample ${item.art}" loading="lazy">`:item.photo_id?`<img src="/api/files/${esc(item.photo_id)}" alt="${esc(d.name)}" loading="lazy">`:`<div class="placeholder-art">${icon('camera')}<span>No photo</span></div>`}<div class="card-topline"><span class="item-number">${String(index+1).padStart(2,'0')}</span>${d.status==='inbox'?'<span class="tag-label">Needs details</span>':''}</div><span class="card-arrow">${icon('arrow')}</span></div><div class="card-body"><div class="card-title-row"><h2 class="card-name">${esc(d.name)}</h2><span class="price ${d.priceMinor===null?'price-unset':''}">${esc(groupPrice(item))}</span></div>${item.purchaseCount>1?`<span class="purchase-badge">${item.purchaseCount} purchases · ${item.totalQuantity} units recorded</span>`:''}<p class="card-brand">${esc(d.brand||d.model||'')}</p>${state.sort==='purchaseDate'?`<p class="card-sort-value">Purchased: ${date(d.purchaseDate)}</p>`:state.sort==='price'&&d.priceMinor!==null?`<p class="card-sort-value">Paid ${esc(money(d.priceMinor,d.currency))}</p>`:''}${new Set(item.purchases?.map(p=>JSON.stringify(p.purchaseFor))).size>1?'<span class="recipient-badge">Recipients vary</span>':d.purchaseFor?.kind==='other'?`<span class="recipient-badge">${esc(d.purchaseFor.recipient?`For ${d.purchaseFor.recipient}`:'For someone else')}</span>`:''}<div class="card-location">${icon('pin')}<span>${esc(place)}</span></div></div></button>`;}
 function welcome(){return `<div class="welcome"><div class="welcome-copy"><div class="eyebrow">WELCOME HOME</div><h2>Everything,<br>in its place.</h2><p>Start with one thing. Add a photo, remember the details, and give it a place.</p><div class="welcome-actions"><button class="button primary" data-action="add">+ Add your first item</button><button class="text-button" data-action="sample">Explore a sample <span>↗</span></button></div></div><img src="/art/room.svg" alt="Illustration of an organized home shelf"></div><div class="first-steps"><div class="step"><span>01 / CAPTURE</span><h3>A photo is a start.</h3><p>Add the things you use, keep, and care about.</p></div><div class="step"><span>02 / REMEMBER</span><h3>Keep the details.</h3><p>Store receipts, prices, links, and your own notes.</p></div><div class="step"><span>03 / FIND</span><h3>Give it a place.</h3><p>Find the right room, drawer, or box in seconds.</p></div></div>`;}
 function empty(title,message){return `<div class="empty">${icon('box')}<h2>${title}</h2><p>${message}</p><button class="button secondary" data-action="add">+ Add item</button></div>`;}
 function renderItems(){
   const sortSelect=$('#sort');const sortFocus=document.activeElement===sortSelect;
   const searchFocus=document.activeElement?.id==='search';const selection=searchFocus?[$('#search').selectionStart,$('#search').selectionEnd,$('#search').selectionDirection]:null;
   if(!collectionCount()&&!state.sample&&state.view==='items'&&!state.query&&!state.location){$('#view-content').innerHTML=welcome();return;}
-  $('#view-content').innerHTML=renderToolbar()+`<div class="${state.layout==='list'?'item-list':'item-grid'}" id="items">${state.items.map(card).join('')}</div>`+(state.total===0?empty((state.query||state.tag||state.purchaseFor||state.noPhoto)?'No matches yet':state.view==='inbox'?'Everything is sorted':state.view==='archived'?'No archived items':'This place is ready',(state.query||state.tag||state.purchaseFor||state.noPhoto)?'Try another search or filter.':'Add an item when you are ready.'):'')+(state.items.length<state.total?'<div class="load-more"><button class="button secondary" data-action="more">Load more items</button></div>':'');
+  $('#view-content').innerHTML=renderToolbar()+`<div class="${state.layout==='list'?'item-list':'item-grid'}" id="items" aria-busy="${state.itemsLoading}">${state.itemsLoading&&!state.items.length?'<div class="loading"><span class="spinner"></span>Loading items…</div>':state.items.map(card).join('')}</div>`+(!state.itemsLoading&&state.total===0?empty((state.query||state.tag||state.purchaseFor||state.noPhoto)?'No matches yet':state.view==='inbox'?'Everything is sorted':state.view==='archived'?'No archived items':'This place is ready',(state.query||state.tag||state.purchaseFor||state.noPhoto)?'Try another search or filter.':'Add an item when you are ready.'):'')+(state.items.length<state.total?`<div class="load-more"><button class="button secondary" data-action="more" ${state.itemsLoading?'disabled':''}>${state.itemsLoading?'Loading…':'Load more items'}</button></div>`:'');
   if(sortSelect){$('#sort').replaceWith(sortSelect);sortSelect.value=`${state.sort}:${state.direction}`;if(sortFocus)sortSelect.focus();}
   if(searchFocus){$('#search').focus();if(selection)$('#search').setSelectionRange(...selection);}
 }
 function descendants(id){const ids=new Set([id]);let changed=true;while(changed){changed=false;for(const place of locations())if(ids.has(place.parent_id)&&!ids.has(place.id)){ids.add(place.id);changed=true;}}return ids;}
 async function loadItems(append=false){
-  const requestId=++state.requestId;
+  if(!['items','archived'].includes(state.view))return;
   if(state.sample){const valid=state.location?descendants(state.location):null;let items=sampleItems.filter(item=>(!['inbox','archived'].includes(state.view))&&(!valid||valid.has(item.data.locationId))&&(!state.purchaseFor||(item.data.purchaseFor?.kind||'self')===state.purchaseFor)&&(!state.tag||item.data.tags.includes(state.tag))&&(!state.query||JSON.stringify(item.data).toLowerCase().includes(state.query.toLowerCase())));items=items.filter(item=>!state.noPhoto||(!item.art&&!item.photo_id)).toSorted(sampleOrder);state.items=items;state.total=items.length;state.recordTotal=items.length;renderItems();return;}
-  const query=new URLSearchParams({limit:'120',offset:String(append?state.items.length:0),sort:state.sort,direction:state.direction,photo:state.noPhoto?'missing':'all',group:'product'});
-  for(const [key,value]of Object.entries({q:state.query,location:state.location,tag:state.tag,purchaseFor:state.purchaseFor,status:['inbox','archived'].includes(state.view)?state.view:''}))if(value)query.set(key,value);
-  const response=await api(`/api/items?${query}`);
-  if(requestId!==state.requestId)return;
-  state.items=append?[...state.items,...response.items]:response.items;state.total=response.total;state.recordTotal=response.recordTotal;renderItems();
+  const query=new URLSearchParams({limit:'120',sort:state.sort,direction:state.direction,photo:state.noPhoto?'missing':'all',group:'product'});
+  for(const [key,value]of Object.entries({q:state.query,location:state.location,tag:state.tag,purchaseFor:state.purchaseFor,status:state.view==='archived'?'archived':''}))if(value)query.set(key,value);
+  const queryKey=query.toString();
+  if(append&&(state.itemsLoading||state.itemsQuery!==queryKey))return;
+  const requestId=++state.requestId;
+  query.set('offset',String(append?state.items.length:0));
+  state.itemsLoading=true;
+  if(!append){state.items=[];state.total=0;state.recordTotal=0;state.itemsQuery=null;}
+  renderItems();
+  try{
+    const response=await api(`/api/items?${query}`);
+    if(requestId!==state.requestId)return;
+    const reference=JSON.stringify(response.priceReference);
+    if(append&&state.sort==='price'&&state.itemsPriceReference!==reference){
+      toast('Reference rates changed. The list restarted.');
+      await loadItems();return;
+    }
+    state.items=append?[...state.items,...response.items]:response.items;
+    state.total=response.total;state.recordTotal=response.recordTotal;
+    state.itemsQuery=queryKey;state.itemsPriceReference=reference;state.priceReference=response.priceReference;
+  }finally{
+    if(requestId===state.requestId){state.itemsLoading=false;renderItems();}
+  }
 }
-async function refresh(){state.bootstrap=await api('/api/bootstrap');renderChrome();await renderView();}
+async function refresh(){state.bootstrap=await api('/api/bootstrap');state.priceReference=state.bootstrap.priceReference;renderChrome();await renderView();}
 const inbox=new InboxReview({
   root:$('#view-content'),read:api,send,money,date,place:locationPath,
   open:async(id,edit)=>{await openItem(id);if(edit){$('#detail').close();openEditor(state.selected);}},
@@ -83,6 +102,7 @@ const inbox=new InboxReview({
   active:()=>state.view==='inbox',samples:()=>state.sample?sampleItems:null,
 });
 async function renderView(){
+  clearTimeout(debounce);state.requestId++;state.itemsLoading=false;
   renderChrome();
   if(state.view==='inbox'){state.requestId++;await inbox.start();return;}
   if(['items','archived'].includes(state.view)){await loadItems();return;}
@@ -177,7 +197,7 @@ document.addEventListener('click',async event=>{
     }
   }catch(error){button.disabled=false;toast(error.message);}
 });
-document.addEventListener('input',event=>{if(event.target.id==='search'){state.query=event.target.value;clearTimeout(debounce);debounce=setTimeout(()=>loadItems().catch(error=>toast(error.message)),220);}});
+document.addEventListener('input',event=>{if(event.target.id==='search'){state.query=event.target.value;clearTimeout(debounce);state.requestId++;state.itemsLoading=false;debounce=setTimeout(()=>loadItems().catch(error=>toast(error.message)),220);}});
 document.addEventListener('change',event=>{if(event.target.id==='sort'){[state.sort,state.direction]=event.target.value.split(':');loadItems().catch(error=>toast(error.message));}});
 document.addEventListener('submit',async event=>{
   const form=event.target;if(!['item-form','comment-form','attachment-form','place-form','delete-form'].includes(form.id))return;event.preventDefault();

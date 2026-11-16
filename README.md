@@ -32,6 +32,7 @@ Keep the development server on localhost.
 - Repeat purchases grouped by product, with separate records, quantities, prices, and history.
 - Inbox cards with Keep, Later, Edit, Archive, and Undo buttons. Swipes and keyboard controls also work.
 - Sorting by name, update date, purchase date, and price. A filter shows items without photos.
+- Price sorting compares USD estimates across currencies and shows the original amounts with the reference-rate date.
 - Comments that remain separate from agent edits, revision checks, and change history.
 - Recoverable photo removal, item archiving, and confirmed permanent deletion.
 - ZIP exports with records and files. The agent CLI streams larger exports.
@@ -106,6 +107,11 @@ npm run build:local
 Tests use a temporary database and file store. They do not use production credentials or inventory.
 Production builds use `npm run build` after you configure your deployment.
 The CLI packages are pinned in `package-lock.json`. The `cf` CLI currently uses a beta release.
+
+Price sorting uses a stored reference-rate snapshot from Frankfurter, based on ECB rates.
+It makes no exchange-rate requests while people browse. The interface shows the reference date.
+Run `npm run rates:update` to refresh the snapshot, then review, test, and deploy the change.
+Reference estimates do not change recorded purchase amounts or currencies.
 
 Use [the contribution guide](CONTRIBUTING.md) for changes and [the security guide](SECURITY.md) for access boundaries.
 The original layout samples remain in `design-preview/` and contain synthetic records.

@@ -9,6 +9,7 @@ import { promisify } from 'node:util';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { linkify } from '../public/text.js';
+import { priceReference } from '../src/prices.ts';
 
 test('description links preserve purchase evidence and query parameters',()=>{
   const url='https://www.aliexpress.com/p/order/detail.html?orderId=1000000000000001&source=orders';
@@ -155,7 +156,7 @@ test('inventory lifecycle, agent updates, history, attachments, and privacy',asy
       const sign=direction==='asc'?1:-1;
       const expected=records.toSorted((a,b)=>{
         let value=0;
-        if(sort==='price')value=Number(a.data.priceMinor===null)-Number(b.data.priceMinor===null)||a.data.currency.localeCompare(b.data.currency)||(a.data.priceMinor-b.data.priceMinor)*sign;
+        if(sort==='price')value=Number(a.data.priceMinor===null)-Number(b.data.priceMinor===null)||(Math.round(a.data.priceMinor/priceReference.rates[a.data.currency])-Math.round(b.data.priceMinor/priceReference.rates[b.data.currency]))*sign;
         else if(sort==='purchaseDate')value=Number(!a.data.purchaseDate)-Number(!b.data.purchaseDate)||a.data.purchaseDate.localeCompare(b.data.purchaseDate)*sign;
         else value=(sort==='name'?a.data.name.toLowerCase().localeCompare(b.data.name.toLowerCase()):a.updated_at.localeCompare(b.updated_at))*sign;
         return value||a.id.localeCompare(b.id);
