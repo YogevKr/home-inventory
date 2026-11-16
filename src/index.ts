@@ -264,7 +264,8 @@ export default {
       }
       throw new HttpError(405,'Method not allowed.');
     } catch(error) {
-      if (error instanceof HttpError || error instanceof ShareError || error instanceof PriceError) return json({error:error.message},error.status);
+      if (error instanceof PriceError) return json({error:error.message,code:error.code},error.status);
+      if (error instanceof HttpError || error instanceof ShareError) return json({error:error.message},error.status);
       if (error instanceof z.ZodError) return json({error:error.issues.map(issue=>`${issue.path.join('.')}: ${issue.message}`).join('; ')},400);
       console.error(JSON.stringify({event:'request_failed',message:error instanceof Error?error.message:'Unknown error'}));
       return json({error:'The request failed. Please try again.'},500);

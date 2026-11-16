@@ -80,7 +80,7 @@ export async function checkPrice(env: PriceEnv, id: ItemId, body: unknown, actor
     WHERE price_checks.checked_at < strftime('%Y-%m-%dT%H:%M:%fZ','now','-60 seconds')`).bind(checkId, item.data.productUrl, item.data.currency, id, revision).run();
   if (!claimed.meta.changes) {
     await wishlistItem(env, id, revision);
-    throw new PriceError(429, 'Wait one minute before checking this item again.');
+    throw new PriceError(429, 'Wait one minute before checking this item again.', 'check_cooldown');
   }
   try {
     const value = await readPrice(item.data.productUrl, item.data.currency, env.PRICE_CHECK_HOSTS);

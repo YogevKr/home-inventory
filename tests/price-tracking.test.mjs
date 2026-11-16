@@ -1,7 +1,20 @@
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { checkableUrl, structuredPrice, readPrice } from '../src/price-reader.ts';
+import { build } from 'esbuild';
+import { Miniflare } from 'miniflare';
+
+const bundle = await build({ entryPoints: ['tests/fixtures/price-reader-worker.mjs'], bundle: true, write: false, format: 'esm', platform: 'browser' });
+const readerWorker = new Miniflare({ workers: [{ config: {
+  name: 'price-reader-test', compatibilityDate: '2026-11-15',
+  manifest: { mainModule: 'reader.mjs', modules: { 'reader.mjs': { type: 'esm', contents: bundle.outputFiles[0].text } } },
+} }] });
+after(() => readerWorker.dispose());
+const readPage = async (html, options = {}) => {
+  const response = await readerWorker.dispatchFetch('https://reader.test', { method: 'POST', body: JSON.stringify({ html, url, ...options }) });
+  return { status: response.status, body: await response.json() };
+};
 
 const base = process.env.TEST_URL || 'http://127.0.0.1:8787';
 if (!/^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(base)) throw new Error('Tests require a local server.');
@@ -12,13 +25,14 @@ const call = async (path, data, method = 'GET') => {
 const url = 'https://www.iherb.com/pr/example/123?variant=blue';
 const offer = { '@type': 'Offer', price: '99.95', priceCurrency: 'USD', url, availability: 'https://schema.org/InStock' };
 const product = { '@type': 'Product', name: 'Example', offers: offer };
+const blocks = value => [JSON.stringify(value)];
 const html = value => `<script type="application/ld+json">${JSON.stringify(value)}</script>`;
 
 test('reads an exact product offer and preserves cents', () => {
-  assert.deepEqual(structuredPrice(html(product), url, 'USD'), { priceMinor: 9995, currency: 'USD' });
-  assert.equal(structuredPrice(html({ '@graph': [{ '@type': 'ProductGroup', hasVariant: [product] }] }), url, 'USD').priceMinor, 9995);
-  assert.equal(structuredPrice(html({ ...product, offers: { ...offer, price: 19.99 } }), url, 'USD').priceMinor, 1999);
-  assert.equal(structuredPrice(html({ ...product, url, offers: { ...offer, url: undefined } }), url, 'USD').priceMinor, 9995);
+  assert.deepEqual(structuredPrice(blocks(product), url, 'USD'), { priceMinor: 9995, currency: 'USD' });
+  assert.equal(structuredPrice(blocks({ '@graph': [{ '@type': 'ProductGroup', hasVariant: [product] }] }), url, 'USD').priceMinor, 9995);
+  assert.equal(structuredPrice(blocks({ ...product, offers: { ...offer, price: 19.99 } }), url, 'USD').priceMinor, 1999);
+  assert.equal(structuredPrice(blocks({ ...product, url, offers: { ...offer, url: undefined } }), url, 'USD').priceMinor, 9995);
 });
 
 test('rejects ambiguous, unrelated, expired, unavailable, and mismatched offers', () => {
@@ -39,9 +53,9 @@ test('rejects ambiguous, unrelated, expired, unavailable, and mismatched offers'
     { ...product, offers: { ...offer, price: 1.234 } },
     { ...product, offers: { ...offer, price: -10 } },
     { '@type': 'ItemList', itemListElement: [product] },
-  ]) assert.throws(() => structuredPrice(html(value), url, 'USD'));
-  assert.throws(() => structuredPrice('<html>Login required. $9.99</html>', url, 'USD'));
-  assert.throws(() => structuredPrice('<script type="application/ld+json">broken</script>', url, 'USD'));
+  ]) assert.throws(() => structuredPrice(blocks(value), url, 'USD'));
+  assert.throws(() => structuredPrice([], url, 'USD'));
+  assert.throws(() => structuredPrice(['broken'], url, 'USD'));
 });
 
 test('direct requests cannot use private addresses or arbitrary redirects', async () => {
@@ -57,12 +71,42 @@ test('direct requests cannot use private addresses or arbitrary redirects', asyn
 });
 
 test('fetch failures cannot create a false price', async () => {
-  const page = body => new Response(body, { headers: { 'Content-Type': 'text/html' } });
-  assert.equal((await readPrice(url, 'USD', '', async () => page(html(product)))).priceMinor, 9995);
+  assert.equal((await readPage(html(product))).body.priceMinor, 9995);
   await assert.rejects(readPrice(url, 'USD', '', async () => new Response('Blocked', { status: 403 })), /blocked/);
   await assert.rejects(readPrice(url, 'USD', '', async () => new Response('{}', { headers: { 'Content-Type': 'application/json' } })), /product page/);
   await assert.rejects(readPrice(url, 'USD', '', async () => { throw new Error('Network unavailable'); }), /did not respond/);
-  await assert.rejects(readPrice(url, 'USD', '', async () => page('x'.repeat(2_000_001))), /too large/);
+  assert.equal((await readPage('<html>Login required. $9.99</html>')).body.code, 'offer_missing');
+});
+
+test('reads price data beyond 2 MB without treating other scripts or comments as offers', async () => {
+  const padding = `<script>${'x'.repeat(2_100_000)}</script>`;
+  const decoy = `<!-- ${html({ ...product, offers: { ...offer, price: '1.00' } })} -->`;
+  const result = await readPage(padding + decoy + html(product));
+  assert.equal(result.status, 200, JSON.stringify(result.body));
+  assert.equal(result.body.priceMinor, 9995);
+  const split = await readPage(html({ ...product, name: 'מנורה 💡' }).replace('type="application/ld+json"', "type='APPLICATION/LD+JSON'"), { chunkSize: 1 });
+  assert.equal(split.status, 200, JSON.stringify(split.body));
+  assert.equal(split.body.priceMinor, 9995);
+});
+
+test('reads the complete page before accepting an offer', async () => {
+  const result = await readPage(html(product) + ' '.repeat(2_100_000) + html({ ...product, offers: { ...offer, price: '80.00' } }));
+  assert.equal(result.status, 422);
+  assert.equal(result.body.code, 'offer_ambiguous');
+  assert.equal((await readPage('<script type="application/ld+json">' + JSON.stringify(product))).body.code, 'offer_missing');
+});
+
+test('enforces separate page and structured-data budgets and cancels oversized streams', async () => {
+  const largePage = await readPage(html(product) + ' '.repeat(9_000_000));
+  assert.equal(largePage.status, 422);
+  assert.equal(largePage.body.code, 'page_too_large');
+  assert.equal(largePage.body.cancelled, true);
+  const largeData = await readPage(html({ ...product, description: 'x'.repeat(520_000) }) + ' '.repeat(500_000));
+  assert.equal(largeData.status, 422);
+  assert.equal(largeData.body.code, 'product_data_too_large');
+  assert.equal(largeData.body.cancelled, true);
+  const manyBlocks = await readPage(Array.from({ length: 6 }, () => html({ value: 'x'.repeat(90_000) })).join('') + html(product));
+  assert.equal(manyBlocks.body.code, 'product_data_too_large');
 });
 
 test('price history supports retries, source isolation, export, purchase, and deletion', async () => {
@@ -84,7 +128,9 @@ test('price history supports retries, source isolation, export, purchase, and de
   assert.equal((await call(path + '/prices', { ...first, id: randomUUID(), currency: 'EUR' }, 'POST')).status, 409);
   assert.equal((await call(path + '/prices', { ...first, id: randomUUID(), productUrl: 'https://store.example.com/other' }, 'POST')).status, 409);
   assert.equal((await call(path + '/prices', { ...first, id: randomUUID(), priceMinor: 0 }, 'POST')).status, 400);
-  assert.equal((await call(path + '/prices/check', { revision: item.revision }, 'POST')).status, 422);
+  const unsupported = await call(path + '/prices/check', { revision: item.revision }, 'POST');
+  assert.equal(unsupported.status, 422);
+  assert.equal(unsupported.body.code, 'unsupported_store');
   assert.equal((await call(path + '/prices')).body.count, 1);
   result = await call(path + '/prices', { ...first, id: randomUUID(), priceMinor: 8500 }, 'POST');
   assert.equal(result.body.count, 2);

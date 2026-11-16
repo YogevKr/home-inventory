@@ -98,6 +98,8 @@ Open Wishlist to add an item. Use Mark as bought to confirm its purchase date an
 The same record moves into the collection, with its photos, comments, and history intact.
 Open an item to record prices or request a direct store check. No scheduled checks run while the site is idle.
 Store blocking and missing product data can prevent direct checks. Manual and agent recording remain available.
+The reader streams pages up to 8 MB and retains up to 512 KB of structured price data.
+Failed checks keep saved prices and open the recording form. Price labels show whether a store check or recording supplied them.
 Apply migration `0006_price_tracking.sql` before deployment. See [price tracking](docs/API.md#price-tracking).
 
 Agents use `status: "wishlist"` to save future purchases. See [wishlist API usage](docs/API.md#wishlist).

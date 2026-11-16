@@ -162,6 +162,8 @@ Item details include the same object under `priceTracking`.
 The result contains the latest 100 observations for the current product link and currency, newest first.
 `count` and `lowest` cover the full series. Each observation uses integer `price_minor` and a server `observed_at` timestamp.
 `method` is `page` for direct checks or `recorded` for manual and agent entries.
+`supported: true` means the host permits a check. It does not confirm that the store publishes a readable offer.
+The latest saved price remains valid history after a failed check. `lastCheck` describes the separate direct check.
 `/api/export` includes all series in `priceObservations` and check status in `priceChecks`.
 
 Record a verified price:
@@ -179,6 +181,7 @@ Supply the current item revision, exact product link, and currency.
 `priceMinor` must be positive. `id` is optional; send a UUID for safe retries.
 An identical retry returns the existing observation. A conflicting UUID returns HTTP 409.
 Record only the verified price for the exact model and options. Check shipping and discounts separately.
+Verify the price at the item's saved product URL. An expected price or another store's price is not an observation.
 
 Request a direct check:
 
@@ -198,8 +201,31 @@ The reader requires one matching JSON-LD Product Offer with an explicit price an
 It rejects ranges, ambiguous variants, unavailable offers, expired offers, and used-item offers.
 Shipping, account discounts, checkout prices, and browser-rendered prices may differ.
 A direct check can run once per item per minute. HTTP 429 indicates the cooldown.
-Each request has a 12-second timeout, a 2 MB page limit, and a three-redirect limit.
+Each request has a 12-second timeout, an 8 MB page limit, and a three-redirect limit.
+The reader streams the page and retains at most 512 KB of JSON-LD text. Other scripts do not consume this budget.
+The reader checks the complete page before accepting an offer. Conflicting offers near the page end still cause rejection.
 Redirects must retain the approved host and product address. No cookies or credentials go to stores.
+
+Amazon can omit structured offers even when its page fits the size limit.
+Host approval does not guarantee successful checks for Amazon, iHerb, AliExpress, or other stores.
+
+Reader failures return an `error` message and a `code` for agents. Item-state and cooldown failures also use these codes.
+Authentication and input-validation failures use the standard API errors.
+
+| Code | Next action |
+| --- | --- |
+| `unsupported_store` | Open the saved product link and record a verified price. |
+| `page_too_large`, `product_data_too_large` | Record a verified price. Repeating the request will not change its limits. |
+| `offer_missing`, `offer_ambiguous`, `offer_invalid` | Verify the exact product and options in a browser. Record only its current price. |
+| `offer_unavailable`, `offer_condition`, `offer_expired` | Keep the previous price. Do not record an unavailable, used, or expired offer. |
+| `currency_mismatch` | Check the store currency. Do not relabel or convert an observation. |
+| `store_blocked`, `page_invalid`, `redirect_rejected` | Check the saved link in a browser. The store can require a session. |
+| `store_unreachable` | Retry later or record a verified price. |
+| `check_cooldown` | Wait at least one minute before another check. |
+| `price_error` | Follow the message. The item or revision can require an update. |
+
+These codes describe the failed request. Saved `lastCheck.error` retains the readable message.
+HTTP 422 adds no observation and preserves earlier prices. Do not repeatedly retry permanent failures during one run.
 
 Self-hosted deployments can add a `PRICE_CHECK_HOSTS` text binding containing comma-separated exact hostnames.
 Add only trusted public store hosts. Never add internal services or domains that resolve to private networks.
