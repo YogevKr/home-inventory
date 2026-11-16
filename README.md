@@ -11,9 +11,10 @@ This repository contains sample records and illustrations, with no personal inve
 ## Try it locally
 
 Use Node 24.10 or later and npm. Local development needs no Cloudflare account or secrets.
+Copy the clone URL from GitHub's **Code** menu and replace `YOUR_REPOSITORY_URL` below.
 
 ```sh
-git clone https://github.com/YogevKr/home-inventory.git
+git clone YOUR_REPOSITORY_URL home-inventory
 cd home-inventory
 npm ci
 npm run db:local
@@ -122,7 +123,7 @@ Use [the contribution guide](CONTRIBUTING.md) for changes and [the security guid
 The original layout samples remain in `design-preview/` and contain synthetic records.
 The MIT [license](LICENSE) permits use, modification, and deployment.
 
-Existing exports retain the `kriger-home-v1` format identifier for compatibility.
+Exports use the `home-inventory-v1` format identifier. See [the export format](docs/API.md#exports).
 
 
 ## Collection sharing and browsing
@@ -142,6 +143,6 @@ Public pages include social image metadata. Messaging services can retain cached
 
 For browser regression checks, start the local server on port 8797. Then run `python3 scripts/verify-browser.py`.
 This optional check requires Python, Playwright, and its WebKit browser. It uses synthetic local records and removes them afterward.
-It checks iPhone sharing, selection, public photos, paging order, scroll position, failed requests, and retries.
+It checks iPhone sharing, selection, public photos, paging order, scroll position, failed requests, retries, and ZIP exports.
 Run `python3 scripts/verify-inbox-browser.py` to check Delete on desktop and mobile, including cancellation, errors, and grouped purchases.
 Set `TEST_URL` to use another localhost port. The script rejects remote hosts.

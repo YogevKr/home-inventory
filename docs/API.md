@@ -251,6 +251,17 @@ They remain in storage, authenticated file links, and full exports for recovery.
 Exported attachments include `removed_at`; `null` means the attachment is visible.
 The browser shows recovery controls under **Removed files**.
 
+## Exports
+
+`GET /api/export` returns JSON with `format: "home-inventory-v1"` and an `exportedAt` timestamp.
+The response includes `items`, `locations`, `comments`, `attachments`, and `activity` arrays.
+Attachment records contain metadata. Retrieve file contents through `/api/files/:id`.
+
+The browser downloads `home-inventory-YYYY-MM-DD.zip`, containing `inventory.json` and files under `files/ATTACHMENT_ID/FILENAME`.
+The CLI writes the same JSON format to `inventory.json` and stores each file at `files/ATTACHMENT_ID`.
+Changing the format identifier does not change the record fields or file contents.
+External tools that check the identifier must accept `home-inventory-v1` for new exports.
+
 ## Error codes
 
 | Code | Meaning |

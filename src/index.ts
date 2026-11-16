@@ -140,7 +140,7 @@ export default {
       }
       if (path === '/api/export' && request.method === 'GET') {
         const [items,locations,comments,attachments,activity] = await env.DB.batch(['items','locations','comments','attachments','activity'].map(table=>env.DB.prepare(`SELECT * FROM ${table}`)));
-        return json({format:'kriger-home-v1',exportedAt:new Date().toISOString(),items:items?.results,locations:locations?.results,comments:comments?.results,attachments:attachments?.results,activity:activity?.results});
+        return json({format:'home-inventory-v1',exportedAt:new Date().toISOString(),items:items?.results,locations:locations?.results,comments:comments?.results,attachments:attachments?.results,activity:activity?.results});
       }
       const fileMatch=path.match(/^\/api\/files\/([^/]+)$/);
       if (fileMatch && ['GET','HEAD'].includes(request.method)) {
