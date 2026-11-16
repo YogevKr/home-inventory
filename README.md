@@ -33,6 +33,7 @@ Keep the development server on localhost.
 - Inbox cards with Keep, Later, Edit, Archive, and Undo buttons. Swipes and keyboard controls also work.
 - Sorting by name, update date, purchase date, and price. A filter shows items without photos.
 - Price sorting compares USD estimates across currencies and shows the original amounts with the reference-rate date.
+- Public item pages with selected fields, cleaned photos, expiry, preview, and link revocation.
 - Comments that remain separate from agent edits, revision checks, and change history.
 - Recoverable photo removal, item archiving, and confirmed permanent deletion.
 - ZIP exports with records and files. The agent CLI streams larger exports.
@@ -55,15 +56,17 @@ Keep credentials in your secret manager. The deployment file contains identifier
 flowchart LR
     Browser[Owner browser] --> Access[Cloudflare Access]
     Agent[Agent API client] --> Access
+    Visitor[Shared link visitor] -->|/share/* only| Worker
     Access --> Worker[Worker and static interface]
     Worker --> D1[D1 records and history]
     Worker --> R2[Private R2 files]
 ```
 
-The Worker checks signed Access tokens before serving pages, API responses, or files.
+The Worker checks signed Access tokens before serving private pages, API responses, or original files.
 Production disables local authentication, `workers.dev`, and preview URLs.
 An owner deploys one shared collection. The application has no separate roles or collections for different users.
-Every permitted user and agent can read, edit, and delete collection data.
+Every permitted user and agent can read, edit, delete, and share collection data.
+Public share pages expose only selected snapshots. Enable the narrow Access exception described in [the deployment guide](docs/DEPLOY.md#optional-public-item-sharing).
 
 ## Agents and API
 
@@ -89,7 +92,7 @@ An external agent can collect purchase details and submit them through the API.
 No scheduled jobs, containers, or continuously running server are required.
 Idle deployments consume storage. Account subscriptions, domain registration, and storage above included allowances can still incur charges.
 Traffic adds Worker, D1, and R2 operations. Free allowances depend on your account and plan.
-Browser uploads resize photos to 1,600 pixels and encode WebP to reduce storage.
+Browser uploads resize photos to 1,600 pixels and encode WebP, with JPEG fallback for browsers without WebP encoding.
 
 Check current pricing for [Workers](https://developers.cloudflare.com/workers/platform/pricing/),
 [D1](https://developers.cloudflare.com/d1/platform/pricing/),
@@ -118,3 +121,20 @@ The original layout samples remain in `design-preview/` and contain synthetic re
 The MIT [license](LICENSE) permits use, modification, and deployment.
 
 Existing exports retain the `kriger-home-v1` format identifier for compatibility.
+
+
+## Collection sharing and browsing
+
+Use Share on any collection card or list row. Use Select items, then Share selected, to publish one collection page.
+Each collection supports up to 20 selected purchases. Choose a title, public description, fields, photos, and expiry.
+Use Shared collections to find, copy, or revoke saved links. Apply migration `0005_collection_shares.sql` before deployment.
+Public collection pages use the existing `/share/*` Access rule. See `docs/API.md` for agent endpoints.
+
+The collection loads its next page before you reach the bottom. Load more remains available after a request fails.
+Public pages include social image metadata. Messaging services can retain cached previews.
+
+
+For browser regression checks, start the local server on port 8797. Then run `python3 scripts/verify-browser.py`.
+This optional check requires Python, Playwright, and its WebKit browser. It uses synthetic local records and removes them afterward.
+It checks iPhone sharing, selection, public photos, paging order, scroll position, failed requests, and retries.
+Set `TEST_URL` to use another localhost port. The script rejects remote hosts.

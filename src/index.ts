@@ -1,12 +1,17 @@
+import { publicCollection, manageCollection } from './collection-shares.ts';
 import { z } from 'zod';
 import { authenticate, type AuthEnv } from './auth.ts';
 import { itemId, attachmentId, itemData, itemCreate, itemUpdate, itemRow, itemColumns, locationId, locationInput, type ItemId } from './domain.ts';
 import { groupPurchases, productKey, purchaseSummary } from './purchases.ts';
 import { inboxReview, reviewInbox } from './inbox.ts';
 import { priceInUsd, priceOrderSql, priceReference } from './prices.ts';
+import { publicShare, manageShare, ShareError, storedFileKey } from './shares.ts';
 
 interface Env extends AuthEnv { DB: D1Database; FILES: R2Bucket; ASSETS: Fetcher }
-class HttpError extends Error { constructor(public status: number, message: string) { super(message); } }
+class HttpError extends Error {
+  status: number;
+  constructor(status: number, message: string) { super(message); this.status = status; }
+}
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
 const jsonBody = async (request: Request) => {
   if (!request.headers.get('content-type')?.startsWith('application/json')) throw new HttpError(415, 'Send JSON data.');
@@ -37,10 +42,12 @@ const csp = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 's
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     try {
-      const actor = await authenticate(request,env);
-      if (!actor) return json({ error: 'Sign in through Cloudflare Access.' },401);
       const url = new URL(request.url);
       const path = url.pathname;
+      if (path.startsWith('/share/collection/')) return await publicCollection(request,env);
+      if (path === '/share' || path.startsWith('/share/')) return await publicShare(request,env);
+      const actor = await authenticate(request,env);
+      if (!actor) return json({ error: 'Sign in through Cloudflare Access.' },401);
       if (!['GET','HEAD'].includes(request.method)) {
         const origin = request.headers.get('origin');
         if ((origin && origin !== url.origin) || request.headers.get('sec-fetch-site') === 'cross-site') throw new HttpError(403,'This request came from another site.');
@@ -160,6 +167,10 @@ export default {
         ).bind(actor,fileId,id).run();
         return json(await detail(env,id));
       }
+      const collectionSharing = /^\/api\/collection-shares(?:\/(preview|[^/]+))?$/.exec(path);
+      if (collectionSharing) return await manageCollection(request,env,collectionSharing[1] && collectionSharing[1] !== 'preview' ? collectionSharing[1] : null,collectionSharing[1] === 'preview');
+      const sharing = /^\/api\/items\/([^/]+)\/share(\/preview)?$/.exec(path);
+      if (sharing) return await manageShare(request,env,itemId.parse(sharing[1]),Boolean(sharing[2]));
       const match=path.match(/^\/api\/items\/([^/]+)(?:\/(comments|attachments|restore|purchases))?$/);
       if (!match) throw new HttpError(404,'Page not found.');
       const id=itemId.parse(match[1]);
@@ -174,12 +185,12 @@ export default {
       if (!action && request.method==='DELETE') {
         const { revision } = z.object({ revision:z.number().int().positive() }).strict().parse(await jsonBody(request));
         await env.DB.batch([
-          env.DB.prepare('INSERT INTO deleted_items(id,file_ids) SELECT id,(SELECT json_group_array(id) FROM attachments WHERE item_id=items.id) FROM items WHERE id=? AND revision=? ON CONFLICT(id) DO NOTHING').bind(id,revision),
-          ...['activity','comments','attachments','items'].map(table => env.DB.prepare(`DELETE FROM ${table} WHERE ${table === 'items' ? 'id' : 'item_id'}=? AND EXISTS(SELECT 1 FROM deleted_items WHERE id=?)`).bind(id,id)),
+          env.DB.prepare('INSERT INTO deleted_items(id,file_ids) SELECT id,(SELECT json_group_array(file_key) FROM (SELECT id AS file_key,item_id FROM attachments UNION ALL SELECT photo_key AS file_key,item_id FROM item_shares WHERE photo_key IS NOT NULL UNION ALL SELECT photo_key AS file_key,item_id FROM collection_share_items WHERE photo_key IS NOT NULL) WHERE item_id=items.id) FROM items WHERE id=? AND revision=? ON CONFLICT(id) DO NOTHING').bind(id,revision),
+          ...['activity','comments','collection_share_items','item_shares','attachments','items'].map(table => env.DB.prepare(`DELETE FROM ${table} WHERE ${table === 'items' ? 'id' : 'item_id'}=? AND EXISTS(SELECT 1 FROM deleted_items WHERE id=?)`).bind(id,id)),
         ]);
         const deleted = await env.DB.prepare('SELECT file_ids FROM deleted_items WHERE id=?').bind(id).first<{file_ids:string}>();
         if (!deleted) { await exists(env,id); throw new HttpError(409,'This item changed. Reload it before deleting.'); }
-        const files = z.array(attachmentId).parse(JSON.parse(deleted.file_ids));
+        const files = z.array(storedFileKey).parse(JSON.parse(deleted.file_ids));
         try {
           for (let offset=0;offset<files.length;offset+=1000) await env.FILES.delete(files.slice(offset,offset+1000));
         } catch {
@@ -236,7 +247,7 @@ export default {
       }
       throw new HttpError(405,'Method not allowed.');
     } catch(error) {
-      if (error instanceof HttpError) return json({error:error.message},error.status);
+      if (error instanceof HttpError || error instanceof ShareError) return json({error:error.message},error.status);
       if (error instanceof z.ZodError) return json({error:error.issues.map(issue=>`${issue.path.join('.')}: ${issue.message}`).join('; ')},400);
       console.error(JSON.stringify({event:'request_failed',message:error instanceof Error?error.message:'Unknown error'}));
       return json({error:'The request failed. Please try again.'},500);

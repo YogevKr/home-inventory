@@ -13,3 +13,13 @@ Report vulnerabilities through GitHub's private vulnerability reporting feature 
 Do not post credentials or private inventory in public issues.
 
 No independent security audit has been completed. Review changes before deploying them to your own account.
+
+Public sharing is optional. Its Access exception must cover only `/share/*` on the inventory hostname.
+The Worker serves only share pages, their selected photos, and their stylesheet without authentication.
+The remaining collection, API, static assets, and original files still require a verified Access token.
+Never add a Bypass policy to the main inventory application.
+
+Share pages contain allowlisted snapshots and metadata-free photo copies. Owners can revoke links or set expiry dates.
+Deletion invalidates all links for that purchase. Public responses disable caching and scripts and request search exclusion.
+Links use 256 random bits. Anyone with a link can save or forward its content.
+Revocation stops future access but cannot withdraw external copies. Treat share URLs as access credentials.
