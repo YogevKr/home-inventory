@@ -1,0 +1,20 @@
+{
+  "asin": "B0CWLHSKYC",
+  "url": "https://www.amazon.com/dp/B0CWLHSKYC?th=1&psc=1&language=en_US&currency=USD",
+  "currency": "USD",
+  "zipcode": "10001",
+  "is_available": true,
+  "final_price": 129.99,
+  "buying_option_type": "PRIME_SAVINGS_UPSELL",
+  "seller_name": "AqaraDirect",
+  "all_inactive_buy_box": [
+    {
+      "title": "Regular Price",
+      "price": "$159.99",
+      "delivery_shipped_from": "Amazon",
+      "sold_by": "AqaraDirect",
+      "delivery_details": "FREE delivery Saturday, November 21",
+      "buying_option_type": "NEW"
+    }
+  ]
+}

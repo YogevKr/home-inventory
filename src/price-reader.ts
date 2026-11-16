@@ -1,9 +1,15 @@
 import { z } from 'zod';
 import { itemData } from './domain.ts';
 
+type PriceErrorCode = 'price_error' | 'unsupported_store' | 'offer_missing' | 'offer_ambiguous' | 'offer_invalid'
+  | 'currency_mismatch' | 'offer_unavailable' | 'offer_condition' | 'offer_expired' | 'redirect_rejected'
+  | 'store_blocked' | 'page_invalid' | 'page_too_large' | 'product_data_too_large' | 'store_unreachable' | 'check_cooldown'
+  | 'provider_config' | 'provider_auth' | 'provider_limit' | 'provider_pending' | 'provider_unavailable' | 'provider_budget';
+
 export class PriceError extends Error {
   status: number;
-  constructor(status: number, message: string) { super(message); this.status = status; }
+  code: PriceErrorCode;
+  constructor(status: number, message: string, code: PriceErrorCode = 'price_error') { super(message); this.status = status; this.code = code; }
 }
 
 const defaultHosts = [
@@ -20,7 +26,7 @@ export function checkableUrl(value: string, extraHosts = ''): URL {
   }
   const allowed = [...defaultHosts, ...extraHosts.split(',').map(host => host.trim().toLowerCase()).filter(Boolean)];
   if (!allowed.includes(url.hostname) || !/^[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}$/i.test(url.hostname)) {
-    throw new PriceError(422, 'This store does not support direct checks. Open the product link and record its price.');
+    throw new PriceError(422, 'This store does not support direct checks. Open the product link and record its price.', 'unsupported_store');
   }
   return url;
 }
@@ -51,7 +57,7 @@ const productSchema = z.object({ '@type': typeName, url: z.string().optional(), 
 const nodeSchema = z.object({ '@graph': z.array(z.unknown()).optional(), hasVariant: z.array(z.unknown()).optional() });
 const hasType = (value: z.infer<typeof typeName>, type: string) => (Array.isArray(value) ? value : [value]).includes(type);
 
-export function structuredPrice(html: string, productUrl: string, currency: string, now = new Date()) {
+export function structuredPrice(blocks: string[], productUrl: string, currency: string, now = new Date()) {
   const products: z.infer<typeof productSchema>[] = [];
   function visit(value: unknown, depth = 0) {
     if (depth > 12) return;
@@ -61,9 +67,8 @@ export function structuredPrice(html: string, productUrl: string, currency: stri
     const node = nodeSchema.safeParse(value);
     if (node.success) for (const child of [...(node.data['@graph'] ?? []), ...(node.data.hasVariant ?? [])]) visit(child, depth + 1);
   }
-  for (const script of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)) {
-    if (!/\btype\s*=\s*(["'])application\/ld\+json\1/i.test(script[1] ?? '')) continue;
-    try { visit(JSON.parse(script[2] ?? '')); } catch { /* A malformed block cannot supply a price. */ }
+  for (const block of blocks) {
+    try { visit(JSON.parse(block)); } catch { /* A malformed block cannot supply a price. */ }
   }
   const target = productAddress(productUrl, productUrl);
   const matches = (value: string) => { try { return productAddress(value, productUrl) === target; } catch { return false; } };
@@ -76,24 +81,25 @@ export function structuredPrice(html: string, productUrl: string, currency: stri
       return address.data.url ? matches(address.data.url) : Boolean(product.url);
     });
   });
-  if (offers.length !== 1) throw new PriceError(422, 'The page has no single offer for this product link. Record the verified price.');
+  if (!offers.length) throw new PriceError(422, 'The store did not publish a readable price for this product. Open the product link and record its price.', 'offer_missing');
+  if (offers.length !== 1) throw new PriceError(422, 'The page has multiple offers for this product. Open the product link and record its price.', 'offer_ambiguous');
   const parsed = offerSchema.safeParse(offers[0]);
-  if (!parsed.success || !hasType(parsed.data['@type'], 'Offer')) throw new PriceError(422, 'The page has no valid product offer.');
+  if (!parsed.success || !hasType(parsed.data['@type'], 'Offer')) throw new PriceError(422, 'The page has no valid product offer.', 'offer_invalid');
   const offer = parsed.data;
-  if (offer.priceCurrency !== currency) throw new PriceError(422, `The store returned ${offer.priceCurrency}. The item uses ${currency}.`);
+  if (offer.priceCurrency !== currency) throw new PriceError(422, `The store returned ${offer.priceCurrency}. The item uses ${currency}.`, 'currency_mismatch');
   if (offer.availability && !/^(?:https?:\/\/schema.org\/)?InStock$/.test(offer.availability)) {
-    throw new PriceError(422, 'This offer is not in stock. The last price stays saved.');
+    throw new PriceError(422, 'This offer is not in stock. The last price stays saved.', 'offer_unavailable');
   }
   if (offer.itemCondition && !/^(?:https?:\/\/schema.org\/)?NewCondition$/.test(offer.itemCondition)) {
-    throw new PriceError(422, 'This offer is not for a new item. Record the verified price.');
+    throw new PriceError(422, 'This offer is not for a new item. Record the verified price.', 'offer_condition');
   }
   if ((offer.priceValidUntil && (!Number.isFinite(Date.parse(offer.priceValidUntil)) || offer.priceValidUntil.slice(0, 10) < now.toISOString().slice(0, 10))) ||
       (offer.validFrom && (!Number.isFinite(Date.parse(offer.validFrom)) || Date.parse(offer.validFrom) > now.getTime()))) {
-    throw new PriceError(422, 'This offer is outside its valid dates.');
+    throw new PriceError(422, 'This offer is outside its valid dates.', 'offer_expired');
   }
   const amount = Number(offer.price) * 100;
   if (!Number.isFinite(amount) || amount <= 0 || amount > 1_000_000_000_000 || Math.abs(amount - Math.round(amount)) > 0.0001) {
-    throw new PriceError(422, 'The page has an invalid product price.');
+    throw new PriceError(422, 'The page has an invalid product price.', 'offer_invalid');
   }
   return { priceMinor: Math.round(amount), currency: offer.priceCurrency };
 }
@@ -107,37 +113,63 @@ export async function readPrice(productUrl: string, currency: string, extraHosts
       if ([301, 302, 303, 307, 308].includes(response.status)) {
         await response.body?.cancel();
         const location = response.headers.get('location');
-        if (!location) throw new PriceError(422, 'The store returned an invalid redirect.');
+        if (!location) throw new PriceError(422, 'The store returned an invalid redirect.', 'redirect_rejected');
         const next = checkableUrl(new URL(location, url).href, extraHosts);
         if (productAddress(next.href, url.href) !== productAddress(productUrl, productUrl)) {
-          throw new PriceError(422, 'The store redirected to another page. Update the product link or record its price.');
+          throw new PriceError(422, 'The store redirected to another page. Update the product link or record its price.', 'redirect_rejected');
         }
         url = next;
         continue;
       }
-      if (!response.ok) { await response.body?.cancel(); throw new PriceError(422, 'The store blocked this check or returned an error. Record the verified price.'); }
+      if (!response.ok) { await response.body?.cancel(); throw new PriceError(422, 'The store blocked this check or returned an error. Record the verified price.', 'store_blocked'); }
       if (!response.headers.get('content-type')?.toLowerCase().includes('text/html')) {
-        await response.body?.cancel(); throw new PriceError(422, 'The store did not return a product page.');
+        await response.body?.cancel(); throw new PriceError(422, 'The store did not return a product page.', 'page_invalid');
       }
-      const reader = response.body?.getReader();
-      if (!reader) throw new PriceError(422, 'The store returned an empty page.');
-      const decoder = new TextDecoder();
-      let bytes = 0, html = '';
+      if (!response.body) throw new PriceError(422, 'The store returned an empty page.', 'page_invalid');
+      let bytes = 0, dataBytes = 0, collecting = false, block = '';
+      let limitError: PriceError | undefined;
+      const blocks: string[] = [];
+      const encoder = new TextEncoder();
+      const limited = response.body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
+        transform(chunk, controller) {
+          bytes += chunk.byteLength;
+          if (bytes > 8_000_000) {
+            limitError = new PriceError(422, 'This page exceeds the 8 MB check limit. Open the product link and record its price.', 'page_too_large');
+            throw limitError;
+          }
+          controller.enqueue(chunk);
+        },
+      }));
+      const parsed = new HTMLRewriter().on('script', {
+        element(element) {
+          collecting = element.getAttribute('type')?.trim().toLowerCase() === 'application/ld+json';
+          block = '';
+          element.onEndTag(() => { if (collecting) blocks.push(block); collecting = false; block = ''; });
+        },
+        text(chunk) {
+          if (!collecting) return;
+          dataBytes += encoder.encode(chunk.text).byteLength;
+          if (dataBytes > 512_000) {
+            limitError = new PriceError(422, 'The page has too much structured price data. Open the product link and record its price.', 'product_data_too_large');
+            throw limitError;
+          }
+          block += chunk.text;
+        },
+      }).transform(new Response(limited, { headers: response.headers }));
+      const reader = parsed.body?.getReader();
+      if (!reader) throw new PriceError(422, 'The store returned an empty page.', 'page_invalid');
       try {
         for (;;) {
           const chunk = await reader.read();
           if (chunk.done) break;
-          bytes += chunk.value.byteLength;
-          if (bytes > 2_000_000) throw new PriceError(422, 'This page is too large for a direct check. Record the verified price.');
-          html += decoder.decode(chunk.value, { stream: true });
         }
-        html += decoder.decode();
-      } finally { await reader.cancel(); }
-      return structuredPrice(html, productUrl, currency);
+      } catch (error) { throw limitError ?? error; }
+      finally { await reader.cancel().catch(() => {}); }
+      return structuredPrice(blocks, productUrl, currency);
     }
-    throw new PriceError(422, 'The store returned too many redirects.');
+    throw new PriceError(422, 'The store returned too many redirects.', 'redirect_rejected');
   } catch (error) {
     if (error instanceof PriceError) throw error;
-    throw new PriceError(422, 'The store did not respond. Try again or record the verified price.');
+    throw new PriceError(422, 'The store did not respond. Try again or record the verified price.', 'store_unreachable');
   }
 }

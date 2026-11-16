@@ -81,12 +81,25 @@ Request a store check with `POST /api/items/ITEM_UUID/prices/check`:
 ```
 
 Use the current revision instead of assuming it is `1`.
-Direct checks require an approved HTTPS store host and one matching structured product offer.
+Checks use Bright Data when configured for USD Amazon US and US iHerb links.
+Other stores use the direct reader, which requires an approved HTTPS host and one matching structured offer.
+Bright Data records regular prices, excludes Prime and subscription offers, and rejects unavailable products.
+Amazon uses the configured US delivery ZIP, default 10001. This does not confirm delivery to the owner.
+Read `source` on each observation for provider, market, postal code, offer type, and seller.
+Do not compare different offer conditions as a price drop.
+The provider limit defaults to 50 requests per UTC day across all items. Failed requests consume the limit.
+`provider_budget` means wait until 00:00 UTC. `provider_auth` and `provider_config` need the site owner.
+`provider_limit` needs an account credit check. Do not retry `provider_pending` during the same run.
+Provider failures return HTTP 503 and keep saved prices. Checks have no automatic retries.
 Store blocking, login requirements, and missing or ambiguous prices can prevent a check.
 HTTP 422 records no new price. HTTP 429 requires waiting at least one minute before another check for that item.
+Reader failures include an `error` message and a `code`. The full reference lists each code and next action.
+The reader streams up to 8 MB per page and retains up to 512 KB of structured price data.
+Amazon can omit structured offers. No approved store guarantees successful direct checks.
+Do not repeatedly retry size limits or missing offers during one run. Use browser verification when possible.
 Do not invent a price after a failed check.
 
-If an agent verifies the exact product price through another source, send `POST /api/items/ITEM_UUID/prices`:
+After verifying the price at the item's saved product URL, send `POST /api/items/ITEM_UUID/prices`:
 
 ```json
 {
@@ -100,14 +113,19 @@ If an agent verifies the exact product price through another source, send `POST 
 
 Use a new observation UUID for each verified price. Reuse it only for retries of that observation.
 The revision, exact product URL, and currency must match the current item. `priceMinor` must be positive.
+Do not record an expected price or another store's price as an observation for this link.
 Check shipping, options, and account discounts separately. The server supplies the observation timestamp and authenticated actor.
 Price records do not change the item's expected price, purchase totals, or revision.
 
 Read `GET /api/items/ITEM_UUID/prices` for `observations`, `count`, `lowest`, `supported`, `reason`, and `lastCheck`.
 Observations contain `price_minor`, `currency`, `product_url`, `observed_at`, and `method`.
 The API returns the latest 100 observations, newest first. `count` and `lowest` cover the complete current series.
-`method` is `page` for direct checks and `recorded` for manual or agent records.
+`method` is `page` for automatic checks and `recorded` for manual or agent records.
+Provider observations contain `source` metadata. Other observations contain `source: null`.
+`provider` and `market` in the tracking response identify the configured reader and delivery context.
 Item details also include this result under `priceTracking`.
+`supported` means the host permits a request, not that a check will succeed.
+A failed `lastCheck` does not erase or invalidate previously recorded prices.
 
 ## Scheduling
 

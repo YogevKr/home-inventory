@@ -172,3 +172,37 @@ Verify these cases in a signed-out browser:
 Share pages need no scheduled jobs, new services, or external rate requests.
 D1 stores snapshots and links. R2 stores cleaned photo copies. Expiry checks run only when visitors request a page.
 Revocation and item deletion remove photo copies. Expired copies remain until revocation or item deletion.
+
+## Optional Bright Data price reader
+
+Create a Bright Data account and store its API key in your secret manager.
+The integration uses the Amazon Products and iHerb Products scrapers. It adds no npm dependency.
+Configure a Worker secret named `BRIGHT_DATA_API_KEY`. Never add its value to source, build output, or command arguments.
+Declare `BRIGHT_DATA_API_KEY: bindings.secret()` in the Worker environment when enabling this provider.
+Use Cloudflare's secret command with a JSON body supplied through stdin from your secret manager:
+
+```sh
+npx cf workers secrets bulk --worker YOUR_WORKER_NAME --file /dev/stdin
+```
+
+The JSON body is `{"secrets":{"BRIGHT_DATA_API_KEY":{"type":"secret_text","text":"SECRET_FROM_YOUR_MANAGER"}}}`.
+Replace the example value inside your secret-manager command, not in a file or shell argument.
+This command preserves all other Worker secrets.
+
+Optional text bindings:
+
+| Binding | Default | Effect |
+| --- | --- | --- |
+| `BRIGHT_DATA_AMAZON_ZIPCODE` | `10001` | Five-digit US delivery ZIP for Amazon checks |
+| `BRIGHT_DATA_DAILY_LIMIT` | `50` | Maximum provider requests per UTC day, across all items; 0 disables requests |
+
+Apply `0007_price_provider.sql` before deploying this code. It adds observation metadata and a daily usage counter.
+The API uses Bright Data for USD items on Amazon US and the US iHerb host.
+Without the secret, all stores retain the direct page reader.
+Other markets and currencies also retain the direct reader.
+
+Check a known wishlist product through its existing Check price button or API endpoint.
+Verify the result's model, regular price, seller, currency, market, and stock against the product page.
+Check that a failed provider request preserves the previous observations.
+The application does not schedule checks or retry failed requests automatically.
+Provider limits count requests, not credits. Check the provider plan before increasing the daily limit.
