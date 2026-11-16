@@ -79,14 +79,15 @@ async def main():
             await expect(page.get_by_role('button',name='Select items',exact=True)).to_be_hidden()
             await page.get_by_label('Collection actions',exact=True).click()
             await page.get_by_role('button',name='Select items',exact=True).click()
-            for i in [0,1]:
+            for i in range(25):
                 await page.get_by_role('button',name=f'Select {marker} {i:03}',exact=True).last.click()
-            assert await page.locator('.card-select[aria-pressed=true]').count()==2
+            assert await page.locator('.card-select[aria-pressed=true]').count()==25
+            await expect(page.locator('.selection-bar [role=status]')).to_have_text('25 selected')
             await page.screenshot(path=output/'collection-selection-iphone.png',full_page=False)
             # Start loading before the manual paging button enters the viewport.
             await page.evaluate("document.documentElement.style.scrollBehavior='auto'; window.scrollTo(0,document.querySelector('.load-more').getBoundingClientRect().top+scrollY-innerHeight-500)")
             await expect(page.locator('.item-card')).to_have_count(125,timeout=10000)
-            assert await page.locator('.card-select[aria-pressed=true]').count()==2
+            assert await page.locator('.card-select[aria-pressed=true]').count()==25
             ids=await page.locator('.card-open').evaluate_all('(nodes)=>nodes.map(node=>node.dataset.item)')
             assert len(set(ids))==125
             assert ids==[item['id'] for item in items]
@@ -102,13 +103,13 @@ async def main():
             await page.get_by_text('Only these details will appear',exact=True).wait_for()
             preview=page.frame_locator('#share-preview')
             await preview.get_by_role('heading',name='Weekend camera kit',exact=True).wait_for()
-            assert await preview.locator('.collection-entry').count()==2
+            assert await preview.locator('.collection-entry').count()==25
             await page.get_by_role('button',name='Create share link').click()
             await page.get_by_text('Your page is ready',exact=True).wait_for()
             shared=await page.locator('#share-url').input_value(); links.append(shared)
             public=await context.new_page(); await public.goto(shared)
             assert await public.locator('img').evaluate_all("images=>images.every(image=>image.complete&&image.naturalWidth>0)")
-            assert await public.locator('.collection-entry').count()==2
+            assert await public.locator('.collection-entry').count()==25
             assert not await public.get_by_text('Details selected by the owner.',exact=True).count()
             assert 'PRIVATE_' not in await public.content()
             assert await public.evaluate('document.documentElement.scrollWidth<=innerWidth')
@@ -123,7 +124,7 @@ async def main():
             await page.get_by_role('heading',name='Shared collections',exact=True).wait_for()
             assert (await api.get(shared)).status==404
             assert (await api.get(shared+'/photo/0')).status==404
-            print('PASS iPhone collection preview, JPEG photos, saved link management, and revocation',flush=True)
+            print('PASS iPhone sharing 25 items, preview, JPEG photos, saved link management, and revocation',flush=True)
             await page.get_by_role('button',name='Close sharing',exact=True).click()
             failures=[]
             async def fail_once(route):

@@ -107,11 +107,10 @@ function renderItems(appendFrom=null){
   const tagRow=$('.filter-row');if(tagRow)tagRow.scrollLeft=tagScroll;
   if(searchFocus){$('#search').focus({preventScroll:true});if(selection)$('#search').setSelectionRange(...selection);}
 }
-function selectionBar(){return state.selecting?`<div class="selection-bar" aria-label="Selected items"><span role="status">${state.selection.size} selected <small>of 20</small></span><button class="text-button" data-action="clear-selection" ${state.selection.size?'':'disabled'}>Clear</button><button class="button primary" data-action="share-selection" aria-label="Share selected" ${state.selection.size?'':'disabled'}>${icon('share')} Share</button><button class="icon-btn" data-action="select-items" aria-label="Cancel selection">${icon('close')}</button></div>`:'';}
+function selectionBar(){return state.selecting?`<div class="selection-bar" aria-label="Selected items"><span role="status">${state.selection.size} selected</span><button class="text-button" data-action="clear-selection" ${state.selection.size?'':'disabled'}>Clear</button><button class="button primary" data-action="share-selection" aria-label="Share selected" ${state.selection.size?'':'disabled'}>${icon('share')} Share</button><button class="icon-btn" data-action="select-items" aria-label="Cancel selection">${icon('close')}</button></div>`:'';}
 function toggleSelection(id){
   if(state.selection.has(id))state.selection.delete(id);
-  else if(state.selection.size<20)state.selection.add(id);
-  else{toast('Select up to 20 items for each shared collection.');return;}
+  else state.selection.add(id);
   renderItems();document.querySelector(`[data-select-item="${id}"]`)?.focus({preventScroll:true});
 }
 function descendants(id){const ids=new Set([id]);let changed=true;while(changed){changed=false;for(const place of locations())if(ids.has(place.parent_id)&&!ids.has(place.id)){ids.add(place.id);changed=true;}}return ids;}

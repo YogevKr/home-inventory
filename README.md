@@ -150,7 +150,8 @@ Open the collection actions menu (•••), choose Select items, then Share to
 Filters groups the missing-photo and recipient controls. Active filters remain visible when the panel closes.
 On phones, selection actions stay at the bottom. Sharing has separate Details and Preview views.
 
-Each collection supports up to 20 selected purchases. Choose a title, public description, fields, photos, and expiry.
+Select items without a fixed count limit. Choose a title, public description, fields, photos, and expiry.
+Photo and request-size limits still apply.
 Use Shared collections in the collection actions menu to find, copy, or revoke saved links. Apply migration `0005_collection_shares.sql` before deployment.
 Public collection pages use the existing `/share/*` Access rule. See `docs/API.md` for agent endpoints.
 

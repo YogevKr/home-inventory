@@ -79,11 +79,62 @@ test('collection photos support JPEG, social previews, source removal, and delet
   assert.ok(!singleHtml.includes('PRIVATE_'));
 });
 
+test('large collections retain every item, photo, order, and revision check', async () => {
+  const items = [];
+  for (let start = 0; start < 301; start += 10) {
+    items.push(...await Promise.all(Array.from({ length: Math.min(10, 301 - start) }, create)));
+  }
+  const data = { ...input(items), items: items.map(item => ({ id: item.id, revision: item.revision, photoId: null })) };
+  assert.ok(JSON.stringify(data).length > 20000);
+  const preview = await call('/api/collection-shares/preview', data, 'POST');
+  assert.equal(preview.status, 200);
+  assert.equal(((await preview.json()).html.match(/class="collection-entry"/g) || []).length, items.length);
+
+  const before = (await (await call('/api/collection-shares')).json()).shares.length;
+  const stale = { ...data, items: data.items.map((item, index) => index === 300 ? { ...item, revision: 999 } : item) };
+  assert.equal((await call('/api/collection-shares', stale, 'POST')).status, 409);
+  assert.equal((await (await call('/api/collection-shares')).json()).shares.length, before);
+
+  const plain = await call('/api/collection-shares', data, 'POST');
+  assert.equal(plain.status, 201);
+  const plainShare = (await plain.json()).share;
+  assert.equal(((await (await fetch(plainShare.url)).text()).match(/class="collection-entry"/g) || []).length, items.length);
+  assert.equal((await call(`/api/collection-shares/${plainShare.id}`, null, 'DELETE')).status, 200);
+
+  const form = new FormData();
+  for (const position of [...Array.from({ length: 21 }, (_, index) => index), 300]) {
+    data.items[position].photoId = await attach(items[position]);
+    form.set(`photo-${position}`, new File([webp], 'shared.webp', { type: 'image/webp' }));
+  }
+  form.set('data', JSON.stringify(data));
+  const published = await fetch(base + '/api/collection-shares', { method: 'POST', body: form });
+  assert.equal(published.status, 201);
+  const { share } = await published.json();
+  const html = await (await fetch(share.url)).text();
+  assert.equal((html.match(/class="collection-entry"/g) || []).length, items.length);
+  let position = -1;
+  for (const item of items) {
+    const next = html.indexOf(item.data.name, position + 1);
+    assert.ok(next > position, item.data.name);
+    position = next;
+  }
+  assert.ok(!html.includes('PRIVATE_'));
+  for (const position of [20, 300]) {
+    const photo = await fetch(`${share.url}/photo/${position}`);
+    assert.equal(photo.status, 200);
+    assert.deepEqual(Buffer.from(await photo.arrayBuffer()), webp);
+  }
+  assert.equal((await fetch(`${share.url}/photo/301`)).status, 404);
+  assert.equal((await fetch(`${share.url}/photo/99999999999999999999`)).status, 404);
+  assert.equal((await call(`/api/collection-shares/${share.id}`, null, 'DELETE')).status, 200);
+  assert.equal((await fetch(`${share.url}/photo/300`)).status, 404);
+});
+
 test('collection validation rejects missing, stale, duplicate, and private fields without partial publication', async () => {
   const item = await create(), other = await create(), photoId = await attach(other);
   const data = input([item]);
   const invalid = [
-    { ...data, items: [] }, { ...data, items: Array(21).fill(data.items[0]) },
+    { ...data, items: [] },
     { ...data, items: [data.items[0], data.items[0]] }, { ...data, title: ' ' },
     { ...data, fields: ['serialNumber'] }, { ...data, expiresAt: '2000-01-01T00:00:00Z' },
     { ...data, items: [{ ...data.items[0], photoId }] },
