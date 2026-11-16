@@ -30,7 +30,7 @@ Keep the development server on localhost.
 - Purchase dates, prices, currencies, sellers, warranties, receipts, and product links.
 - Recipient marks for purchases you bought for someone else.
 - Repeat purchases grouped by product, with separate records, quantities, prices, and history.
-- Inbox cards with Keep, Later, Edit, Archive, and Undo buttons. Swipes and keyboard controls also work.
+- Inbox cards with Keep, Later, Edit, Archive, Delete, and Undo buttons. Swipes and keyboard controls also work.
 - Sorting by name, update date, purchase date, and price. A filter shows items without photos.
 - Price sorting compares USD estimates across currencies and shows the original amounts with the reference-rate date.
 - Public item pages with selected fields, cleaned photos, expiry, preview, and link revocation.
@@ -40,6 +40,8 @@ Keep the development server on localhost.
 - Google or email-code login through Cloudflare Access, plus service tokens for agents.
 
 Later skips an inbox card for the current browser session. Keep and Archive change the selected purchases.
+Delete opens a confirmation for the displayed purchase. Other purchases in the group remain. Deletion cannot be undone.
+The item editor shows the current photo beside the option to add another photo.
 Undo rejects newer edits. Each decision processes up to 200 purchases.
 
 ## Deploy your own
@@ -141,4 +143,5 @@ Public pages include social image metadata. Messaging services can retain cached
 For browser regression checks, start the local server on port 8797. Then run `python3 scripts/verify-browser.py`.
 This optional check requires Python, Playwright, and its WebKit browser. It uses synthetic local records and removes them afterward.
 It checks iPhone sharing, selection, public photos, paging order, scroll position, failed requests, and retries.
+Run `python3 scripts/verify-inbox-browser.py` to check Delete on desktop and mobile, including cancellation, errors, and grouped purchases.
 Set `TEST_URL` to use another localhost port. The script rejects remote hosts.

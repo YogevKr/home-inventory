@@ -5,14 +5,15 @@ const symbols = {
   undo: 'M3 10h11a7 7 0 0 1 0 14 M3 10l5-5 M3 10l5 5',
   edit: 'm4 16-1 5 5-1L20 8l-4-4z M13 7l4 4',
   archive: 'M3 3h18v5H3z M5 8v13h14V8 M9 12h6',
+  delete: 'M3 6h18 M9 6V3h6v3 M5 6l1 15h12l1-15 M10 10v7 M14 10v7',
   camera: 'M3 7h4l2-3h6l2 3h4v13H3z M16 13a4 4 0 1 1-8 0 4 4 0 0 1 8 0',
 };
 const icon = name => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${symbols[name]}"/></svg>`;
 const purchaseList = item => item.purchases || [{ id: item.id, revision: item.revision, ...item.data }];
 
 export class InboxReview {
-  constructor({ root, read, send, money, date, place, open, changed, active, samples }) {
-    Object.assign(this, { root, read, send, money, date, place, open, changed, active, samples });
+  constructor({ root, read, send, money, date, place, open, remove, changed, active, samples }) {
+    Object.assign(this, { root, read, send, money, date, place, open, remove, changed, active, samples });
     this.queue = [];
     this.history = [];
     this.later = new Set();
@@ -83,9 +84,14 @@ export class InboxReview {
     if (action === 'undo') return this.undo();
     const item = this.queue[0];
     if (!item) return;
-    if (action === 'edit' || action === 'details') {
+    if (action === 'edit' || action === 'details' || action === 'delete') {
       this.busy = true;
-      try { await this.open(item.id, action === 'edit'); }
+      this.error = '';
+      try {
+        if (action === 'delete') {
+          if (!this.sample) await this.remove(item.id);
+        } else await this.open(item.id, action === 'edit');
+      }
       catch (error) { this.error = error.message; }
       finally { this.busy = false; this.render(); }
       return;
@@ -181,7 +187,7 @@ export class InboxReview {
         <button class="review-action review-edit" data-review="edit" ${disabled}>${icon('edit')}<span>Edit</span></button>
         <button class="review-action review-keep" data-review="keep" ${disabled}>${icon('keep')}<span>Keep${purchaseList(item).length > 1 ? ` ${Math.min(purchaseList(item).length, 200)}` : ''}</span></button>
       </div><p class="review-hint">Swipe left for Later · Swipe right to Keep</p>` : ''}
-      <div class="review-secondary"><button data-review="undo" ${disabled || !last || last.undoUnavailable ? 'disabled' : ''}>${icon('undo')} Undo</button><span role="status" aria-live="polite">${esc(lastMessage)}</span>${item && !this.loading ? `<button data-review="archive" ${disabled}>${icon('archive')} Archive${purchaseList(item).length > 1 ? ` ${Math.min(purchaseList(item).length, 200)}` : ''}</button>` : '<span></span>'}</div>
+      <div class="review-secondary"><button data-review="undo" ${disabled || !last || last.undoUnavailable ? 'disabled' : ''}>${icon('undo')} Undo</button><span role="status" aria-live="polite">${esc(lastMessage)}</span>${item && !this.loading ? `<div class="review-secondary-actions"><button data-review="archive" ${disabled}>${icon('archive')} Archive${purchaseList(item).length > 1 ? ` ${Math.min(purchaseList(item).length, 200)}` : ''}</button>${this.sample ? '' : `<button data-review="delete" aria-label="Delete ${purchaseList(item).length > 1 ? 'purchase' : 'item'}" ${disabled}>${icon('delete')} Delete</button>`}</div>` : '<span></span>'}</div>
       ${item && !this.loading ? `<p class="review-scope">${purchaseList(item).length > 1 ? `Keep and Archive apply to ${Math.min(purchaseList(item).length, 200)} inbox purchases.` : 'Keep moves this purchase to your collection.'} Later leaves it in the inbox.</p>` : ''}
       </div>
     </section>`;
