@@ -6,6 +6,18 @@ Set `INVENTORY_URL` to that origin before using the CLI.
 Cloudflare Access requires `CF-Access-Client-Id` and `CF-Access-Client-Secret` headers for agents.
 Inject both values through your secret manager. Never put them in command arguments, logs, or source files.
 
+## Agent discovery
+
+`GET /llms.txt` provides the agent quick start. `/llm.txt` returns the same guide.
+`GET /llms-full.txt` provides this API reference, generated from `docs/API.md` during the build.
+These three exact paths support `GET` and `HEAD` without authentication. Other methods return HTTP 405.
+Configure Cloudflare Access bypass rules for only these exact documentation paths. Keep the API and files protected.
+The guides contain instructions and examples, never inventory records or credentials.
+
+`GET /api/bootstrap` includes tag objects with `name` and `wishlistCount`.
+`wishlistCount` counts all wishlist records with that tag, independent of pagination or other list filters.
+Wishlist tag controls show only tags with a positive count. The count changes when an item leaves the wishlist.
+
 ## Routes
 
 | Method | Path | Result |
@@ -367,6 +379,8 @@ External tools that check the identifier must accept `home-inventory-v1` for new
 | 409 | Conflicting revision or reused UUID |
 | 413 | Request exceeds the size limit |
 | 415 | Unsupported content type |
+| 422 | A direct price check could not read one verified offer |
+| 429 | A direct price check is within the one-minute cooldown |
 | 503 | Item deleted; retry deletion to finish file cleanup |
 
 Cloudflare Access can return a login redirect before requests reach the Worker.

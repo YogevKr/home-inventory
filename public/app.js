@@ -25,7 +25,7 @@ const placeName=id=>locations().find(p=>p.id===id)?.name||'No place yet';
 function toast(message){clearTimeout(toastTimeout);$('#toast').textContent=message;$('#toast').hidden=false;toastTimeout=setTimeout(()=>$('#toast').hidden=true,4500);}
 async function api(path,options={}){const response=await fetch(path,options);let data;try{data=await response.json();}catch{throw new Error('Your session expired. Reload this page to sign in.');}if(!response.ok)throw Object.assign(new Error(data.error||'The request failed.'),{status:response.status});return data;}
 const send=(path,body,method='POST')=>api(path,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-const tags=()=>state.sample?[...new Set(sampleItems.flatMap(item=>item.data.tags))]:state.bootstrap?.tags.map(tag=>tag.name)??[];
+const tags=()=>state.sample?(state.view==='wishlist'?[]:[...new Set(sampleItems.flatMap(item=>item.data.tags))]):state.bootstrap?.tags.filter(tag=>state.view!=='wishlist'||tag.wishlistCount>0).map(tag=>tag.name)??[];
 const countStatus=status=>state.sample?(status==='active'?sampleItems.length:0):state.bootstrap?.counts.find(row=>row.status===status)?.count??0;
 const collectionCount=()=>['active','lent','inbox'].reduce((sum,status)=>sum+countStatus(status),0);
 function renderChrome(){
@@ -147,7 +147,7 @@ async function loadItems(append=false){
     if(requestId===state.requestId){state.itemsLoading=false;renderItems(appendFrom);}
   }
 }
-async function refresh(){state.bootstrap=await api('/api/bootstrap');state.priceReference=state.bootstrap.priceReference;renderChrome();await renderView();}
+async function refresh(){state.bootstrap=await api('/api/bootstrap');state.priceReference=state.bootstrap.priceReference;if(state.view==='wishlist'&&state.tag&&!tags().includes(state.tag))state.tag='';renderChrome();await renderView();}
 const sharing=new ItemSharing({read:api,toast,resize:resizedPhoto});
 const inbox=new InboxReview({
   root:$('#view-content'),read:api,send,money,date,place:locationPath,

@@ -8,10 +8,11 @@
     "build": "npm run assets && cf build",
     "check": "tsc --noEmit",
     "rates:update": "node scripts/update-price-rates.mjs",
-    "test": "node scripts/test.mjs",
+    "test": "npm run agent-docs && node scripts/test.mjs",
     "test:running": "node --test --test-concurrency=1 tests/*.test.mjs",
     "deploy": "cf deploy",
-    "assets": "esbuild src/export.js --bundle --format=esm --minify --outfile=public/export.bundle.js",
+    "assets": "npm run agent-docs && esbuild src/export.js --bundle --format=esm --minify --outfile=public/export.bundle.js",
+    "agent-docs": "node scripts/build-agent-docs.mjs",
     "build:local": "npm run assets && cf build --mode development",
     "db:local": "cf d1 migrations apply 00000000-0000-4000-8000-000000000002 --local --mode development --dir migrations"
   },
