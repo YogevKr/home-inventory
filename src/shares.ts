@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { attachmentId, itemData, itemId, itemRow, itemColumns } from './domain.ts';
 import { publicHeaders, sharedData, sharePage } from './share-page.ts';
 
-type ShareEnv = { DB: D1Database; FILES: R2Bucket; ASSETS: Fetcher };
+export type ShareEnv = { DB: D1Database; FILES: R2Bucket; ASSETS: Fetcher };
 export class ShareError extends Error {
   status: number;
   constructor(status: number, message: string) { super(message); this.status = status; }
@@ -10,7 +10,7 @@ export class ShareError extends Error {
 const tokenFormat = /^[A-Za-z0-9_-]{43}$/;
 const photoKey = z.string().regex(/^shares\/[A-Za-z0-9_-]{43}\.(webp|jpg)$/);
 export const storedFileKey = z.union([attachmentId, photoKey]);
-const shareInput = z.object({
+export const shareInput = z.object({
   revision: z.number().int().positive(), description: z.string().trim().max(2000).default(''),
   fields: z.array(z.enum(['brand', 'model', 'price', 'seller', 'purchaseDate', 'productUrl', 'tags'])).max(7).default(['brand', 'model']),
   photoId: attachmentId.nullable().default(null), expiresAt: z.iso.datetime().nullable().transform(value => value === null ? null : new Date(value).toISOString()).default(() => new Date(Date.now() + 30 * 86400000).toISOString()),
@@ -21,8 +21,8 @@ const shareRow = z.object({
   photo_key: photoKey.nullable(), source_photo_id: attachmentId.nullable(),
   created_at: z.string(), expires_at: z.string().nullable(), revoked_at: z.string().nullable(),
 });
-const json = (data: unknown, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
-const unavailable = (method: string, status = 404) => new Response(method === 'HEAD' ? null : 'This shared page is unavailable.', { status, headers: { ...publicHeaders, 'Content-Type': 'text/plain; charset=utf-8' } });
+export const json = (data: unknown, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
+export const unavailable = (method: string, status = 404) => new Response(method === 'HEAD' ? null : 'This shared page is unavailable.', { status, headers: { ...publicHeaders, 'Content-Type': 'text/plain; charset=utf-8' } });
 
 export async function publicShare(request: Request, env: ShareEnv): Promise<Response> {
   if (!['GET', 'HEAD'].includes(request.method)) return unavailable(request.method, 405);
@@ -44,10 +44,10 @@ export async function publicShare(request: Request, env: ShareEnv): Promise<Resp
     const jpeg = share.photo_key.endsWith('.jpg');
     return new Response(request.method === 'HEAD' ? null : file.body, { headers: { ...publicHeaders, 'Content-Type': jpeg ? 'image/jpeg' : 'image/webp', 'Content-Length': String(file.size), 'Content-Disposition': `inline; filename="shared-photo.${jpeg ? 'jpg' : 'webp'}"` } });
   }
-  return new Response(request.method === 'HEAD' ? null : sharePage(share.snapshot, hasPhoto ? `/share/${share.token}/photo` : null), { headers: { ...publicHeaders, 'Content-Type': 'text/html; charset=utf-8' } });
+  return new Response(request.method === 'HEAD' ? null : sharePage(share.snapshot, hasPhoto ? `/share/${share.token}/photo` : null, `${new URL(request.url).origin}/share/${share.token}`), { headers: { ...publicHeaders, 'Content-Type': 'text/html; charset=utf-8' } });
 }
 
-function snapshot(data: z.infer<typeof itemData>, input: z.infer<typeof shareInput>) {
+export function snapshot(data: z.infer<typeof itemData>, input: z.infer<typeof shareInput>) {
   const fields = new Set(input.fields);
   return sharedData.parse({
     name: data.name, description: input.description,
@@ -58,7 +58,7 @@ function snapshot(data: z.infer<typeof itemData>, input: z.infer<typeof shareInp
   });
 }
 
-async function sharePhoto(file: File): Promise<{ bytes: ArrayBuffer; format: 'webp' | 'jpg' }> {
+export async function sharePhoto(file: File): Promise<{ bytes: ArrayBuffer; format: 'webp' | 'jpg' }> {
   if (!['image/webp', 'image/jpeg'].includes(file.type) || file.size > 1_500_000) throw new ShareError(400, 'Use a WebP or JPEG photo smaller than 1.5 MB.');
   const bytes = await file.arrayBuffer();
   if (file.type === 'image/jpeg') return { bytes: await jpegWithoutMetadata(bytes), format: 'jpg' };
@@ -184,9 +184,9 @@ export async function manageShare(request: Request, env: ShareEnv, id: z.infer<t
   return json({ id: shareId, url: `${origin}/share/${token}`, expiresAt }, 201);
 }
 
-async function readJson(request: Request): Promise<unknown> {
+export async function readJson(request: Request, limit = 10000): Promise<unknown> {
   if (!request.headers.get('content-type')?.startsWith('application/json')) throw new ShareError(415, 'Send JSON data.');
   const raw = await request.text();
-  if (raw.length > 10000) throw new ShareError(413, 'Share data is too large.');
+  if (raw.length > limit) throw new ShareError(413, 'Share data is too large.');
   try { return JSON.parse(raw); } catch { throw new ShareError(400, 'Invalid JSON.'); }
 }

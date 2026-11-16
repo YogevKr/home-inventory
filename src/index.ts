@@ -1,3 +1,4 @@
+import { publicCollection, manageCollection } from './collection-shares.ts';
 import { z } from 'zod';
 import { authenticate, type AuthEnv } from './auth.ts';
 import { itemId, attachmentId, itemData, itemCreate, itemUpdate, itemRow, itemColumns, locationId, locationInput, type ItemId } from './domain.ts';
@@ -43,6 +44,7 @@ export default {
     try {
       const url = new URL(request.url);
       const path = url.pathname;
+      if (path.startsWith('/share/collection/')) return await publicCollection(request,env);
       if (path === '/share' || path.startsWith('/share/')) return await publicShare(request,env);
       const actor = await authenticate(request,env);
       if (!actor) return json({ error: 'Sign in through Cloudflare Access.' },401);
@@ -165,6 +167,8 @@ export default {
         ).bind(actor,fileId,id).run();
         return json(await detail(env,id));
       }
+      const collectionSharing = /^\/api\/collection-shares(?:\/(preview|[^/]+))?$/.exec(path);
+      if (collectionSharing) return await manageCollection(request,env,collectionSharing[1] && collectionSharing[1] !== 'preview' ? collectionSharing[1] : null,collectionSharing[1] === 'preview');
       const sharing = /^\/api\/items\/([^/]+)\/share(\/preview)?$/.exec(path);
       if (sharing) return await manageShare(request,env,itemId.parse(sharing[1]),Boolean(sharing[2]));
       const match=path.match(/^\/api\/items\/([^/]+)(?:\/(comments|attachments|restore|purchases))?$/);
@@ -181,8 +185,8 @@ export default {
       if (!action && request.method==='DELETE') {
         const { revision } = z.object({ revision:z.number().int().positive() }).strict().parse(await jsonBody(request));
         await env.DB.batch([
-          env.DB.prepare('INSERT INTO deleted_items(id,file_ids) SELECT id,(SELECT json_group_array(file_key) FROM (SELECT id AS file_key,item_id FROM attachments UNION ALL SELECT photo_key AS file_key,item_id FROM item_shares WHERE photo_key IS NOT NULL) WHERE item_id=items.id) FROM items WHERE id=? AND revision=? ON CONFLICT(id) DO NOTHING').bind(id,revision),
-          ...['activity','comments','item_shares','attachments','items'].map(table => env.DB.prepare(`DELETE FROM ${table} WHERE ${table === 'items' ? 'id' : 'item_id'}=? AND EXISTS(SELECT 1 FROM deleted_items WHERE id=?)`).bind(id,id)),
+          env.DB.prepare('INSERT INTO deleted_items(id,file_ids) SELECT id,(SELECT json_group_array(file_key) FROM (SELECT id AS file_key,item_id FROM attachments UNION ALL SELECT photo_key AS file_key,item_id FROM item_shares WHERE photo_key IS NOT NULL UNION ALL SELECT photo_key AS file_key,item_id FROM collection_share_items WHERE photo_key IS NOT NULL) WHERE item_id=items.id) FROM items WHERE id=? AND revision=? ON CONFLICT(id) DO NOTHING').bind(id,revision),
+          ...['activity','comments','collection_share_items','item_shares','attachments','items'].map(table => env.DB.prepare(`DELETE FROM ${table} WHERE ${table === 'items' ? 'id' : 'item_id'}=? AND EXISTS(SELECT 1 FROM deleted_items WHERE id=?)`).bind(id,id)),
         ]);
         const deleted = await env.DB.prepare('SELECT file_ids FROM deleted_items WHERE id=?').bind(id).first<{file_ids:string}>();
         if (!deleted) { await exists(env,id); throw new HttpError(409,'This item changed. Reload it before deleting.'); }

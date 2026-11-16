@@ -325,3 +325,39 @@ Search-engine exclusion headers request no indexing. Anyone with the link can vi
 Revocation cannot remove copies saved elsewhere. The public path provides no listing or search API.
 Share tokens remain in the private database so authorized owners can copy existing links.
 Collection exports exclude share tokens and public photo copies. Shares are not restored by importing an inventory export.
+
+### Shared collections
+
+Collection sharing creates one public page for 1–20 selected purchases. Each entry uses a fixed snapshot.
+Names always appear. Default fields include brand and model. Private item descriptions never carry over.
+Deleting a purchase removes it from all shared collections. Removing a source photo hides its public copies.
+Empty collections, revoked links, and expired links return `404`.
+
+- `POST /api/collection-shares/preview`: preview a collection without publishing it.
+- `POST /api/collection-shares`: publish a collection; returns `{ share }` with `id`, `url`, and `expiresAt`.
+- `GET /api/collection-shares`: list unrevoked links, including expired links.
+- `GET /api/collection-shares/:id`: get one link, or `{ share: null }` after revocation.
+- `DELETE /api/collection-shares/:id`: revoke the link and remove its public photos. Safe to retry.
+
+These routes require authentication. Use this JSON body for preview or publication without photos:
+
+```json
+{
+  "title": "Weekend gear",
+  "description": "A public note for this collection.",
+  "fields": ["brand", "model"],
+  "expiresAt": "2027-01-01T00:00:00.000Z",
+  "items": [{ "id": "ITEM_UUID", "revision": 1, "photoId": null }]
+}
+```
+
+`fields` accepts the same options as single-item sharing. Each item must appear once, with its current revision.
+The default expiry is 30 days. Use `null` for no expiry.
+For photos, use multipart form data: JSON in `data`, and converted photos in `photo-0`, `photo-1`, etc.
+Each file matches its zero-based item position. Set that entry's `photoId` to its source attachment ID.
+Photo validation and metadata removal match single-item sharing. Each photo must be smaller than 1.5 MB.
+The total upload limit is 30.1 MB. Invalid or stale inputs create no partial collection.
+
+Public read-only routes are `/share/collection/:token` and `/share/collection/:token/photo/:position`.
+They remain under the existing `/share/*` public Access rule. All management routes remain protected.
+Public pages include social preview metadata for selected photos. Messaging services may cache those previews after revocation.

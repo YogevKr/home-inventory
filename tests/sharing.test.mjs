@@ -162,14 +162,15 @@ test('Safari JPEG shares remove metadata and support revocation and item deletio
 
 test('public routing cannot bypass authentication for the collection or API', async () => {
   const env = { DEV_AUTH: 'false', AUTH_ISSUER: '', AUTH_AUDIENCE: '' };
-  for (const path of ['/', '/api/bootstrap', '/api/items', `/api/items/${randomUUID()}/share`, '/app.js', '/share-page.css', '/api/files/' + randomUUID()]) {
+  for (const path of ['/', '/api/bootstrap', '/api/items', '/api/collection-shares', '/api/collection-shares/preview', `/api/collection-shares/${randomUUID()}`, `/api/items/${randomUUID()}/share`, '/app.js', '/share-page.css', '/api/files/' + randomUUID()]) {
     assert.equal((await worker.fetch(new Request('https://inventory.example.com' + path), env)).status, 401, path);
   }
-  for (const path of ['/share', '/share/', '/share/not-a-token', '/share/assets/app.js', '/share/%2e%2e%2fapi%2fitems', '/share/' + randomUUID()]) {
+  for (const path of ['/share', '/share/', '/share/not-a-token', '/share/collection/not-a-token', '/share/collection/../api/items', '/share/assets/app.js', '/share/%2e%2e%2fapi%2fitems', '/share/' + randomUUID()]) {
     assert.equal((await worker.fetch(new Request('https://inventory.example.com' + path), env)).status, 404, path);
   }
   const token = 'a'.repeat(43);
   assert.equal((await worker.fetch(new Request(`https://inventory.example.com/share/${token}`, { method: 'DELETE' }), env)).status, 405);
+  assert.equal((await worker.fetch(new Request(`https://inventory.example.com/share/collection/${token}`, { method: 'DELETE' }), env)).status, 405);
   const css = await fetch(base + '/share/assets/page.css'); assert.equal(css.status, 200); assert.match(css.headers.get('content-type'), /^text\/css/);
 });
 

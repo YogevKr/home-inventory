@@ -121,3 +121,14 @@ The original layout samples remain in `design-preview/` and contain synthetic re
 The MIT [license](LICENSE) permits use, modification, and deployment.
 
 Existing exports retain the `kriger-home-v1` format identifier for compatibility.
+
+
+## Collection sharing and browsing
+
+Use Share on any collection card or list row. Use Select items, then Share selected, to publish one collection page.
+Each collection supports up to 20 selected purchases. Choose a title, public description, fields, photos, and expiry.
+Use Shared collections to find, copy, or revoke saved links. Apply migration `0005_collection_shares.sql` before deployment.
+Public collection pages use the existing `/share/*` Access rule. See `docs/API.md` for agent endpoints.
+
+The collection loads its next page before you reach the bottom. Load more remains available after a request fails.
+Public pages include social image metadata. Messaging services can retain cached previews.
