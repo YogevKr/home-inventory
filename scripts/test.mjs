@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 import { createServer } from 'node:net';
 import { setTimeout } from 'node:timers/promises';
 
-const state = await mkdtemp(join(tmpdir(), 'kriger-inventory-test-'));
+const state = await mkdtemp(join(tmpdir(), 'home-inventory-test-'));
 const cf = resolve('node_modules/.bin/cf');
 const probe = createServer();
 await new Promise(resolve => probe.listen(0, '127.0.0.1', resolve));

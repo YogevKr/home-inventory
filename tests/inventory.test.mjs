@@ -293,18 +293,19 @@ test('inventory lifecycle, agent updates, history, attachments, and privacy',asy
     assert.equal(await authenticate(new Request(base+'/api/bootstrap'),{AUTH_ISSUER:'',AUTH_AUDIENCE:'',DEV_AUTH:'false'}),null);
   });
   await t.test('exports item records, comments, and attachment metadata',async()=>{
-    const response=await call('/api/export');assert.equal(response.status,200);assert.equal(response.body.format,'kriger-home-v1');assert.ok(response.body.items.some(record=>record.id===item.body.id));assert.ok(response.body.comments.some(record=>record.item_id===item.body.id));assert.ok(response.body.attachments.some(record=>record.item_id===item.body.id));
+    const response=await call('/api/export');assert.equal(response.status,200);assert.equal(response.body.format,'home-inventory-v1');assert.ok(response.body.items.some(record=>record.id===item.body.id));assert.ok(response.body.comments.some(record=>record.item_id===item.body.id));assert.ok(response.body.attachments.some(record=>record.item_id===item.body.id));
   });
   await t.test('agent CLI reads items and exports attachment bytes',async()=>{
     const run=promisify(execFile);
     const options={env:{...process.env,INVENTORY_URL:base}};
     const result=await run(process.execPath,['scripts/inventory.mjs','get',item.body.id],options);
     assert.equal(JSON.parse(result.stdout).id,item.body.id);
-    const directory=await mkdtemp(join(tmpdir(),'kriger-export-test-'));
+    const directory=await mkdtemp(join(tmpdir(),'home-inventory-export-test-'));
     try {
       const destination=join(directory,'backup');
       await run(process.execPath,['scripts/inventory.mjs','export',destination],options);
       const exported=JSON.parse(await readFile(join(destination,'inventory.json'),'utf8'));
+      assert.equal(exported.format,'home-inventory-v1');
       const attachment=exported.attachments.find(file=>file.item_id===item.body.id);
       assert.equal(await readFile(join(destination,'files',attachment.id),'utf8'),'Receipt for verification');
       assert.ok(exported.comments.some(comment=>comment.item_id===item.body.id));

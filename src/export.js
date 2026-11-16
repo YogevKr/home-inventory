@@ -26,7 +26,7 @@ export async function exportArchive({ read, onProgress }) {
   const url = URL.createObjectURL(new Blob(chunks, { type: 'application/zip' }));
   const link = document.createElement('a');
   link.href = url;
-  link.download = `kriger-home-${new Date().toISOString().slice(0, 10)}.zip`;
+  link.download = `home-inventory-${new Date().toISOString().slice(0, 10)}.zip`;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 30000);
 }

@@ -1,6 +1,7 @@
-import asyncio, os, re
+import asyncio, json, os, re
 from uuid import uuid4
 from pathlib import Path
+from zipfile import ZipFile
 from playwright.async_api import async_playwright, expect
 
 origin=os.environ.get('TEST_URL','http://127.0.0.1:8797')
@@ -144,6 +145,19 @@ async def main():
             await page.get_by_role('button',name='Load more items',exact=True).click(timeout=5000)
             await expect(page.locator('.item-card')).to_have_count(125)
             print('PASS iPhone pagination stops after errors and supports manual retry',flush=True)
+
+            async with page.expect_download() as pending:
+                await page.get_by_role('button',name=re.compile(r'^Export collection')).click()
+            download=await pending.value
+            assert re.fullmatch(r'home-inventory-\d{4}-\d{2}-\d{2}\.zip',download.suggested_filename)
+            with ZipFile(await download.path()) as archive:
+                exported=json.loads(archive.read('inventory.json'))
+                assert exported['format']=='home-inventory-v1'
+                assert all(item['id'] in {record['id'] for record in exported['items']} for item in items)
+                for item in items[:2]:
+                    attachment=next(file for file in exported['attachments'] if file['item_id']==item['id'])
+                    assert archive.read(f"files/{attachment['id']}/test.jpg")==image
+            print('PASS iPhone ZIP uses project names and preserves records and photo bytes',flush=True)
 
             print('PASS iPhone filters, list sharing, menu dismissal, and mobile form validation',flush=True)
             assert not errors,errors
