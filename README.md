@@ -29,6 +29,7 @@ Keep the development server on localhost.
 
 - Photo cards, list view, search, tags, and nested places.
 - Wishlist for future purchases, with expected prices, links, photos, and a Mark as bought action.
+- Wishlist price history, changes, lowest recorded prices, direct checks, and manual or agent recording.
 - Purchase dates, prices, currencies, sellers, warranties, receipts, and product links.
 - Recipient marks for purchases you bought for someone else.
 - Repeat purchases grouped by product, with separate records, quantities, prices, and history.
@@ -95,6 +96,10 @@ An external agent can collect purchase details and submit them through the API.
 Wishlist items stay separate from collection counts, purchase value, and purchase groups.
 Open Wishlist to add an item. Use Mark as bought to confirm its purchase date and actual price.
 The same record moves into the collection, with its photos, comments, and history intact.
+Open an item to record prices or request a direct store check. No scheduled checks run while the site is idle.
+Store blocking and missing product data can prevent direct checks. Manual and agent recording remain available.
+Apply migration `0006_price_tracking.sql` before deployment. See [price tracking](docs/API.md#price-tracking).
+
 Agents use `status: "wishlist"` to save future purchases. See [wishlist API usage](docs/API.md#wishlist).
 
 ## Cost
@@ -154,4 +159,5 @@ It checks iPhone sharing, selection, public photos, paging order, scroll positio
 Run `python3 scripts/verify-inbox-browser.py` to check Delete on desktop and mobile, including cancellation, errors, and grouped purchases.
 Set `TEST_URL` to use another localhost port. The script rejects remote hosts.
 
+Run `TEST_URL=http://127.0.0.1:8806 python3 scripts/verify-price-tracking-browser.py` to check price history and mobile controls.
 Run `python3 scripts/verify-wishlist-browser.py` to check wishlist entry, purchase conversion, cancellation, and mobile layouts.

@@ -16,6 +16,9 @@ Inject both values through your secret manager. Never put them in command argume
 | POST | `/api/inbox/review` | Keep, archive, or undo a batch of inbox purchases atomically |
 | GET | `/api/items/:id` | Details, attachments, comments, and recent history |
 | GET | `/api/items/:id/purchases` | Purchase summaries for the same product, including archived records |
+| GET | `/api/items/:id/prices` | Price history for the current product link and currency |
+| POST | `/api/items/:id/prices` | Record a verified wishlist price |
+| POST | `/api/items/:id/prices/check` | Read a public store offer on demand |
 | PUT | `/api/items/:id` | Replace editable fields using the current revision |
 | GET | `/api/items/:id/share` | Get the current share link and selected fields |
 | POST | `/api/items/:id/share/preview` | Preview selected fields without publishing |
@@ -128,6 +131,66 @@ No changes occur until the user saves the purchase. A stale revision returns HTT
 To restore an archived wishlist entry through the API, set its status to `wishlist`.
 The browser uses available archive history to restore it to Wishlist.
 Shared pages use neutral Price and Store labels. Sharing does not publish an item's private status.
+
+### Price tracking
+
+Apply migration `0006_price_tracking.sql` before running this version.
+Open a wishlist item to use its price tracker. Checks run only when requested.
+There is no scheduled Worker, notification service, browser session, or paid scraping service.
+
+Tracked prices use separate records. They never replace `data.priceMinor` or change purchase totals, sorting, or the item revision.
+Each record stores its product link, currency, timestamp, source method, and authenticated actor.
+A changed product link or currency starts a separate series. Prior series remain in the full export.
+Bought and archived items retain their series. Only wishlist items accept new prices.
+Deleting an item also deletes its price records and check results.
+Public share pages do not expose price history, check results, or actors.
+
+`GET /api/items/:id/prices` returns `observations`, `count`, `lowest`, `supported`, `reason`, and `lastCheck`.
+Item details include the same object under `priceTracking`.
+The result contains the latest 100 observations for the current product link and currency, newest first.
+`count` and `lowest` cover the full series. Each observation uses integer `price_minor` and a server `observed_at` timestamp.
+`method` is `page` for direct checks or `recorded` for manual and agent entries.
+`/api/export` includes all series in `priceObservations` and check status in `priceChecks`.
+
+Record a verified price:
+
+```json
+{"id":"bd090b65-55f5-4b12-85fb-2a41e55998b5","revision":3,"priceMinor":7995,"currency":"USD","productUrl":"https://example.com/lamp"}
+```
+
+```sh
+node scripts/inventory.mjs record-price ITEM_UUID < observed-price.json
+node scripts/inventory.mjs prices ITEM_UUID
+```
+
+Supply the current item revision, exact product link, and currency.
+`priceMinor` must be positive. `id` is optional; send a UUID for safe retries.
+An identical retry returns the existing observation. A conflicting UUID returns HTTP 409.
+Record only the verified price for the exact model and options. Check shipping and discounts separately.
+
+Request a direct check:
+
+```json
+{"revision":3}
+```
+
+```sh
+node scripts/inventory.mjs check-price ITEM_UUID < revision.json
+```
+
+Direct checks require HTTPS and an approved store host.
+The default hosts cover Amazon US, UK, DE, FR, IT, ES; iHerb; AliExpress; Shop; and Shop.com.
+See `src/price-reader.ts` for exact hostnames. Host approval permits requests; it does not guarantee a readable price.
+Store blocking, login pages, and missing structured data return HTTP 422 without adding an observation.
+The reader requires one matching JSON-LD Product Offer with an explicit price and matching currency.
+It rejects ranges, ambiguous variants, unavailable offers, expired offers, and used-item offers.
+Shipping, account discounts, checkout prices, and browser-rendered prices may differ.
+A direct check can run once per item per minute. HTTP 429 indicates the cooldown.
+Each request has a 12-second timeout, a 2 MB page limit, and a three-redirect limit.
+Redirects must retain the approved host and product address. No cookies or credentials go to stores.
+
+Self-hosted deployments can add a `PRICE_CHECK_HOSTS` text binding containing comma-separated exact hostnames.
+Add only trusted public store hosts. Never add internal services or domains that resolve to private networks.
 
 ## Inbox review
 

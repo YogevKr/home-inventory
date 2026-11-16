@@ -4,10 +4,12 @@ import { authenticate, type AuthEnv } from './auth.ts';
 import { itemId, attachmentId, itemStatus, itemData, itemCreate, itemUpdate, itemRow, itemColumns, locationId, locationInput, type ItemId } from './domain.ts';
 import { groupPurchases, productKey, purchaseSummary } from './purchases.ts';
 import { inboxReview, reviewInbox } from './inbox.ts';
+import { PriceError } from './price-reader.ts';
+import { priceTracking, recordPrice, checkPrice, type PriceEnv } from './price-tracking.ts';
 import { priceInUsd, priceOrderSql, priceReference } from './prices.ts';
 import { publicShare, manageShare, ShareError, storedFileKey } from './shares.ts';
 
-interface Env extends AuthEnv { DB: D1Database; FILES: R2Bucket; ASSETS: Fetcher }
+interface Env extends AuthEnv, PriceEnv { DB: D1Database; FILES: R2Bucket; ASSETS: Fetcher }
 class HttpError extends Error {
   status: number;
   constructor(status: number, message: string) { super(message); this.status = status; }
@@ -29,13 +31,14 @@ async function validateLocation(env: Env, id: string | null) {
 }
 async function detail(env: Env, id: ItemId) {
   const item = await exists(env,id);
-  const [comments, attachments, removedAttachments, activity] = await Promise.all([
+  const [comments, attachments, removedAttachments, activity, tracking] = await Promise.all([
     env.DB.prepare('SELECT * FROM comments WHERE item_id=? ORDER BY created_at,id').bind(id).all(),
     env.DB.prepare('SELECT * FROM attachments WHERE item_id=? AND removed_at IS NULL ORDER BY created_at,id').bind(id).all(),
     env.DB.prepare('SELECT * FROM attachments WHERE item_id=? AND removed_at IS NOT NULL ORDER BY removed_at DESC,id').bind(id).all(),
     env.DB.prepare('SELECT * FROM activity WHERE item_id=? ORDER BY id DESC LIMIT 50').bind(id).all(),
+    priceTracking(env, item),
   ]);
-  return { ...item, comments: comments.results, attachments: attachments.results, removedAttachments: removedAttachments.results, activity: activity.results };
+  return { ...item, priceTracking: tracking, comments: comments.results, attachments: attachments.results, removedAttachments: removedAttachments.results, activity: activity.results };
 }
 const csp = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'";
 
@@ -139,8 +142,8 @@ export default {
         return json(results.results);
       }
       if (path === '/api/export' && request.method === 'GET') {
-        const [items,locations,comments,attachments,activity] = await env.DB.batch(['items','locations','comments','attachments','activity'].map(table=>env.DB.prepare(`SELECT * FROM ${table}`)));
-        return json({format:'home-inventory-v1',exportedAt:new Date().toISOString(),items:items?.results,locations:locations?.results,comments:comments?.results,attachments:attachments?.results,activity:activity?.results});
+        const [items,locations,comments,attachments,activity,priceObservations,priceChecks] = await env.DB.batch(['items','locations','comments','attachments','activity','price_observations','price_checks'].map(table=>env.DB.prepare(`SELECT * FROM ${table}`)));
+        return json({format:'home-inventory-v1',exportedAt:new Date().toISOString(),items:items?.results,locations:locations?.results,comments:comments?.results,attachments:attachments?.results,activity:activity?.results,priceObservations:priceObservations?.results,priceChecks:priceChecks?.results});
       }
       const fileMatch=path.match(/^\/api\/files\/([^/]+)$/);
       if (fileMatch && ['GET','HEAD'].includes(request.method)) {
@@ -171,6 +174,14 @@ export default {
       if (collectionSharing) return await manageCollection(request,env,collectionSharing[1] && collectionSharing[1] !== 'preview' ? collectionSharing[1] : null,collectionSharing[1] === 'preview');
       const sharing = /^\/api\/items\/([^/]+)\/share(\/preview)?$/.exec(path);
       if (sharing) return await manageShare(request,env,itemId.parse(sharing[1]),Boolean(sharing[2]));
+      const prices = /^\/api\/items\/([^/]+)\/prices(?:\/(check))?$/.exec(path);
+      if (prices) {
+        const id = itemId.parse(prices[1]);
+        if (request.method === 'GET' && !prices[2]) return json(await priceTracking(env, await exists(env, id)));
+        if (request.method !== 'POST') throw new HttpError(405, 'Method not allowed.');
+        const body = await jsonBody(request);
+        return json(prices[2] ? await checkPrice(env, id, body, actor) : await recordPrice(env, id, body, actor));
+      }
       const match=path.match(/^\/api\/items\/([^/]+)(?:\/(comments|attachments|restore|purchases))?$/);
       if (!match) throw new HttpError(404,'Page not found.');
       const id=itemId.parse(match[1]);
@@ -247,7 +258,7 @@ export default {
       }
       throw new HttpError(405,'Method not allowed.');
     } catch(error) {
-      if (error instanceof HttpError || error instanceof ShareError) return json({error:error.message},error.status);
+      if (error instanceof HttpError || error instanceof ShareError || error instanceof PriceError) return json({error:error.message},error.status);
       if (error instanceof z.ZodError) return json({error:error.issues.map(issue=>`${issue.path.join('.')}: ${issue.message}`).join('; ')},400);
       console.error(JSON.stringify({event:'request_failed',message:error instanceof Error?error.message:'Unknown error'}));
       return json({error:'The request failed. Please try again.'},500);
