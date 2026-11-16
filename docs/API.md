@@ -52,7 +52,7 @@ The schema rejects unknown fields.
 | `locationId` | Existing place UUID, or `null` |
 | `tags` | Up to 30 tags, each up to 40 characters |
 | `quantity` | Integer from 1 to 100,000; default 1 |
-| `status` | `active`, `inbox`, `lent`, or `archived`; default `active` |
+| `status` | `active`, `inbox`, `wishlist`, `lent`, or `archived`; default `active` |
 | `purchaseFor` | `{"kind":"self"}` by default; or `{"kind":"other","recipient":"Name"}` |
 
 Create:
@@ -98,6 +98,37 @@ node scripts/inventory.mjs update ITEM_UUID < update.json
 Archive by updating `status` to `archived`.
 Restore to the collection by updating `status` to `active`.
 
+## Wishlist
+
+Create future purchases with `status: "wishlist"` through `POST /api/items` or the CLI `create` command.
+Use `priceMinor` for the expected price. Leave `purchaseDate` empty until purchase.
+Photos, links, tags, recipients, comments, history, deletion, and exports work with wishlist items.
+
+```json
+{"data":{"name":"Reading lamp","status":"wishlist","priceMinor":8900,"currency":"USD","productUrl":"https://example.com/lamp"}}
+```
+
+List wishlist items with `GET /api/items?status=wishlist` or:
+
+```sh
+node scripts/inventory.mjs wishlist
+node scripts/inventory.mjs wishlist lamp
+```
+
+The normal collection query excludes wishlist items. Bootstrap purchase values also exclude their expected prices.
+The purchase-group endpoint keeps wishlist entries separate from purchased entries of the same product.
+Wishlist queries support the existing filters, sorting, and pagination. Exports include wishlist records and their files.
+
+After purchase, read the latest record. Update its complete `data` object and current `revision` with `PUT /api/items/:id`.
+Set `status` to `active`, supply the purchase date, and replace the expected price with the actual price.
+Use `null` if the actual price is unknown. Keep the existing ID to preserve photos, comments, and history.
+The browser's Mark as bought action opens this form and clears the expected price before confirmation.
+No changes occur until the user saves the purchase. A stale revision returns HTTP 409.
+
+To restore an archived wishlist entry through the API, set its status to `wishlist`.
+The browser uses available archive history to restore it to Wishlist.
+Shared pages use neutral Price and Store labels. Sharing does not publish an item's private status.
+
 ## Inbox review
 
 Purchase summaries include `revision`. Send the exact IDs and revisions shown in the inbox card:
@@ -137,7 +168,7 @@ Existing records without this field remain unmarked and appear under **For me**.
 | `q` | Search name and editable record text |
 | `location` | Include a place and its descendants |
 | `tag` | Exact tag match |
-| `status` | Exact status; default excludes archived items |
+| `status` | Exact status; default includes only `active`, `inbox`, and `lent` |
 | `purchaseFor` | `self` or `other`; omit to include both |
 | `sort` | `recent`, `name`, `purchaseDate`, or `price`; default `purchaseDate` |
 | `direction` | `asc` or `desc`; default `desc` for dates, otherwise `asc` |

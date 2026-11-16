@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const itemId = z.uuid().brand<'ItemId'>();
 export const locationId = z.uuid().brand<'LocationId'>();
 export const attachmentId = z.uuid().brand<'AttachmentId'>();
+export const itemStatus = z.enum(['active', 'inbox', 'wishlist', 'lent', 'archived']);
 const link = z.union([z.literal(''), z.url().refine(value => /^https?:\/\//i.test(value), 'Use an HTTP or HTTPS link.')]);
 const shortText = z.string().trim().max(200);
 const purchaseFor = z.discriminatedUnion('kind', [
@@ -24,7 +25,7 @@ export const itemData = z.object({
   locationId: locationId.nullable().default(null),
   tags: z.array(z.string().trim().min(1).max(40)).max(30).transform(values => [...new Set(values)]).default([]),
   quantity: z.number().int().min(1).max(100000).default(1),
-  status: z.enum(['active', 'inbox', 'lent', 'archived']).default('active'),
+  status: itemStatus.default('active'),
   borrower: shortText.default(''),
   warrantyDate: z.union([z.literal(''), z.iso.date()]).default(''),
   purchaseFor: purchaseFor.default({ kind: 'self' }),

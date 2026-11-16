@@ -1,7 +1,7 @@
 import { publicCollection, manageCollection } from './collection-shares.ts';
 import { z } from 'zod';
 import { authenticate, type AuthEnv } from './auth.ts';
-import { itemId, attachmentId, itemData, itemCreate, itemUpdate, itemRow, itemColumns, locationId, locationInput, type ItemId } from './domain.ts';
+import { itemId, attachmentId, itemStatus, itemData, itemCreate, itemUpdate, itemRow, itemColumns, locationId, locationInput, type ItemId } from './domain.ts';
 import { groupPurchases, productKey, purchaseSummary } from './purchases.ts';
 import { inboxReview, reviewInbox } from './inbox.ts';
 import { priceInUsd, priceOrderSql, priceReference } from './prices.ts';
@@ -65,7 +65,7 @@ export default {
         const [locations, counts, values, tags] = await Promise.all([
           env.DB.prepare('SELECT id,name,parent_id FROM locations ORDER BY name COLLATE NOCASE').all(),
           env.DB.prepare("SELECT status,COUNT(*) AS count FROM items GROUP BY status").all(),
-          env.DB.prepare("SELECT json_extract(data,'$.currency') AS currency,SUM(json_extract(data,'$.priceMinor')*json_extract(data,'$.quantity')) AS total FROM items WHERE status!='archived' GROUP BY currency").all(),
+          env.DB.prepare("SELECT json_extract(data,'$.currency') AS currency,SUM(json_extract(data,'$.priceMinor')*json_extract(data,'$.quantity')) AS total FROM items WHERE status IN ('active','inbox','lent') GROUP BY currency").all(),
           env.DB.prepare("SELECT DISTINCT j.value AS name FROM items i,json_each(i.data,'$.tags') j WHERE i.status!='archived' ORDER BY name").all(),
         ]);
         return json({ actor, locations: locations.results, counts: counts.results, values: values.results, tags: tags.results, priceReference });
@@ -88,8 +88,8 @@ export default {
         const direction = z.enum(['asc','desc']).parse(url.searchParams.get('direction') ?? (sort === 'recent' || sort === 'purchaseDate' ? 'desc' : 'asc'));
         const conditions: string[] = []; const params: (string | number)[] = [];
         const status = url.searchParams.get('status');
-        if (status) { conditions.push('i.status=?'); params.push(z.enum(['active','inbox','lent','archived']).parse(status)); }
-        else conditions.push("i.status!='archived'");
+        if (status) { conditions.push('i.status=?'); params.push(itemStatus.parse(status)); }
+        else conditions.push("i.status IN ('active','inbox','lent')");
         const q = url.searchParams.get('q')?.trim();
         if (q) { conditions.push("(i.name LIKE ? ESCAPE '\\' OR i.data LIKE ? ESCAPE '\\')"); const term=`%${q.slice(0,120).replace(/[\\%_]/g,'\\$&')}%`; params.push(term,term); }
         const tag = url.searchParams.get('tag');
@@ -178,7 +178,7 @@ export default {
       if (action==='purchases' && request.method==='GET') {
         const item = await exists(env,id);
         const key = productKey(item);
-        const rows = await env.DB.prepare(`SELECT ${itemColumns} FROM items i ORDER BY json_extract(data,'$.purchaseDate') DESC,i.created_at DESC,i.id`).all();
+        const rows = await env.DB.prepare(`SELECT ${itemColumns} FROM items i WHERE (i.status='wishlist')=? ORDER BY json_extract(data,'$.purchaseDate') DESC,i.created_at DESC,i.id`).bind(item.data.status === 'wishlist' ? 1 : 0).all();
         return json(rows.results.map(row => itemRow.parse(row)).filter(row => productKey(row) === key).map(purchaseSummary));
       }
       if (!action && request.method==='GET') return json(await detail(env,id));

@@ -28,6 +28,7 @@ Keep the development server on localhost.
 ## Features
 
 - Photo cards, list view, search, tags, and nested places.
+- Wishlist for future purchases, with expected prices, links, photos, and a Mark as bought action.
 - Purchase dates, prices, currencies, sellers, warranties, receipts, and product links.
 - Recipient marks for purchases you bought for someone else.
 - Repeat purchases grouped by product, with separate records, quantities, prices, and history.
@@ -78,6 +79,7 @@ Inject `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` through your secret m
 
 ```sh
 node scripts/inventory.mjs list
+node scripts/inventory.mjs wishlist
 node scripts/inventory.mjs get ITEM_UUID
 node scripts/inventory.mjs create < item.json
 node scripts/inventory.mjs export /absolute/path/to/new-backup
@@ -89,6 +91,11 @@ Leave unknown prices and places empty. Use stable UUIDs when retrying creation.
 
 The project has no built-in email scanning or store login integration.
 An external agent can collect purchase details and submit them through the API.
+
+Wishlist items stay separate from collection counts, purchase value, and purchase groups.
+Open Wishlist to add an item. Use Mark as bought to confirm its purchase date and actual price.
+The same record moves into the collection, with its photos, comments, and history intact.
+Agents use `status: "wishlist"` to save future purchases. See [wishlist API usage](docs/API.md#wishlist).
 
 ## Cost
 
@@ -146,3 +153,5 @@ This optional check requires Python, Playwright, and its WebKit browser. It uses
 It checks iPhone sharing, selection, public photos, paging order, scroll position, failed requests, retries, and ZIP exports.
 Run `python3 scripts/verify-inbox-browser.py` to check Delete on desktop and mobile, including cancellation, errors, and grouped purchases.
 Set `TEST_URL` to use another localhost port. The script rejects remote hosts.
+
+Run `python3 scripts/verify-wishlist-browser.py` to check wishlist entry, purchase conversion, cancellation, and mobile layouts.
