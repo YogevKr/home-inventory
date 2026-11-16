@@ -125,9 +125,13 @@ Existing exports retain the `kriger-home-v1` format identifier for compatibility
 
 ## Collection sharing and browsing
 
-Use Share on any collection card or list row. Use Select items, then Share selected, to publish one collection page.
+Use the Share icon on any collection photo, list row, or item detail header.
+Open the collection actions menu (•••), choose Select items, then Share to publish one collection page.
+Filters groups the missing-photo and recipient controls. Active filters remain visible when the panel closes.
+On phones, selection actions stay at the bottom. Sharing has separate Details and Preview views.
+
 Each collection supports up to 20 selected purchases. Choose a title, public description, fields, photos, and expiry.
-Use Shared collections to find, copy, or revoke saved links. Apply migration `0005_collection_shares.sql` before deployment.
+Use Shared collections in the collection actions menu to find, copy, or revoke saved links. Apply migration `0005_collection_shares.sql` before deployment.
 Public collection pages use the existing `/share/*` Access rule. See `docs/API.md` for agent endpoints.
 
 The collection loads its next page before you reach the bottom. Load more remains available after a request fails.
