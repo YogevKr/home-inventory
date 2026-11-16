@@ -66,15 +66,29 @@ function groupPrice(item){
 function card(item,index){const d=item.data;const place=new Set(item.purchases?.map(p=>p.locationId)).size>1?'Multiple places':locationPath(d.locationId).split(' / ').slice(-2).join(' · ');return `<article class="item-card ${state.selection.has(item.id)?'is-selected':''}"><button class="card-open" data-item="${esc(item.id)}" aria-label="${state.selecting?'Select':'Open'} ${esc(d.name)}"></button>${state.selecting?`<button class="card-select" data-select-item="${esc(item.id)}" aria-label="Select ${esc(d.name)}" aria-pressed="${state.selection.has(item.id)}">${state.selection.has(item.id)?icon('check'):'<span></span>'}</button>`:''}<div class="card-photo">${item.art?`<img src="/art/${item.art}.svg" alt="Sample ${item.art}" loading="lazy">`:item.photo_id?`<img src="/api/files/${esc(item.photo_id)}" alt="${esc(d.name)}" loading="lazy">`:`<div class="placeholder-art">${icon('camera')}<span>No photo</span></div>`}<div class="card-topline"><span class="item-number">${String(index+1).padStart(2,'0')}</span>${d.status==='inbox'?'<span class="tag-label">Needs details</span>':''}</div><span class="card-arrow">${icon('arrow')}</span></div><div class="card-body"><div class="card-title-row"><h2 class="card-name">${esc(d.name)}</h2><span class="price ${d.priceMinor===null?'price-unset':''}">${esc(groupPrice(item))}</span></div>${item.purchaseCount>1?`<span class="purchase-badge">${item.purchaseCount} purchases · ${item.totalQuantity} units recorded</span>`:''}<p class="card-brand">${esc(d.brand||d.model||'')}</p>${state.sort==='purchaseDate'?`<p class="card-sort-value">Purchased: ${date(d.purchaseDate)}</p>`:state.sort==='price'&&d.priceMinor!==null?`<p class="card-sort-value">Paid ${esc(money(d.priceMinor,d.currency))}</p>`:''}${new Set(item.purchases?.map(p=>JSON.stringify(p.purchaseFor))).size>1?'<span class="recipient-badge">Recipients vary</span>':d.purchaseFor?.kind==='other'?`<span class="recipient-badge">${esc(d.purchaseFor.recipient?`For ${d.purchaseFor.recipient}`:'For someone else')}</span>`:''}<div class="card-location">${icon('pin')}<span>${esc(place)}</span>${state.sample?'':`<button class="card-share" data-share-card="${esc(item.id)}" aria-label="Share ${esc(d.name)}">Share ↗</button>`}</div></div></article>`;}
 function welcome(){return `<div class="welcome"><div class="welcome-copy"><div class="eyebrow">WELCOME HOME</div><h2>Everything,<br>in its place.</h2><p>Start with one thing. Add a photo, remember the details, and give it a place.</p><div class="welcome-actions"><button class="button primary" data-action="add">+ Add your first item</button><button class="text-button" data-action="sample">Explore a sample <span>↗</span></button></div></div><img src="/art/room.svg" alt="Illustration of an organized home shelf"></div><div class="first-steps"><div class="step"><span>01 / CAPTURE</span><h3>A photo is a start.</h3><p>Add the things you use, keep, and care about.</p></div><div class="step"><span>02 / REMEMBER</span><h3>Keep the details.</h3><p>Store receipts, prices, links, and your own notes.</p></div><div class="step"><span>03 / FIND</span><h3>Give it a place.</h3><p>Find the right room, drawer, or box in seconds.</p></div></div>`;}
 function empty(title,message){return `<div class="empty">${icon('box')}<h2>${title}</h2><p>${message}</p><button class="button secondary" data-action="add">+ Add item</button></div>`;}
-function renderItems(){
+function renderPagination(){
+  pageObserver.disconnect();
+  $('#items')?.setAttribute('aria-busy',String(state.itemsLoading));
+  const count=$('.result-count');if(count)count.textContent=state.itemsLoading&&!state.items.length?'Loading items…':`${state.total} product${state.total===1?'':'s'} · ${state.recordTotal} purchase${state.recordTotal===1?'':'s'}`;
+  let more=$('.load-more');
+  if(state.items.length>=state.total){more?.remove();return;}
+  if(!more){more=document.createElement('div');more.className='load-more';$('#view-content').append(more);}
+  more.innerHTML=`<button class="button secondary" data-action="more" ${state.itemsLoading?'disabled':''}>${state.itemsLoading?'Loading…':'Load more items'}</button>`;
+  if(!state.itemsLoading&&!state.itemsLoadError)pageObserver.observe(more);
+}
+function renderItems(appendFrom=null){
+  if(appendFrom!==null&&$('#items')){
+    $('#items').insertAdjacentHTML('beforeend',state.items.slice(appendFrom).map((item,index)=>card(item,appendFrom+index)).join(''));
+    renderPagination();return;
+  }
   pageObserver.disconnect();
   const sortSelect=$('#sort');const sortFocus=document.activeElement===sortSelect;
   const searchFocus=document.activeElement?.id==='search';const selection=searchFocus?[$('#search').selectionStart,$('#search').selectionEnd,$('#search').selectionDirection]:null;
   if(!collectionCount()&&!state.sample&&state.view==='items'&&!state.query&&!state.location){$('#view-content').innerHTML=welcome();return;}
   $('#view-content').innerHTML=renderToolbar()+selectionBar()+`<div class="${state.layout==='list'?'item-list':'item-grid'}" id="items" aria-busy="${state.itemsLoading}">${state.itemsLoading&&!state.items.length?'<div class="loading"><span class="spinner"></span>Loading items…</div>':state.items.map(card).join('')}</div>`+(!state.itemsLoading&&state.total===0?empty((state.query||state.tag||state.purchaseFor||state.noPhoto)?'No matches yet':state.view==='inbox'?'Everything is sorted':state.view==='archived'?'No archived items':'This place is ready',(state.query||state.tag||state.purchaseFor||state.noPhoto)?'Try another search or filter.':'Add an item when you are ready.'):'')+(state.items.length<state.total?`<div class="load-more"><button class="button secondary" data-action="more" ${state.itemsLoading?'disabled':''}>${state.itemsLoading?'Loading…':'Load more items'}</button></div>`:'');
-  if(!state.itemsLoading&&!state.itemsLoadError&&state.items.length<state.total)pageObserver.observe($('.load-more'));
-  if(sortSelect){$('#sort').replaceWith(sortSelect);sortSelect.value=`${state.sort}:${state.direction}`;if(sortFocus)sortSelect.focus();}
-  if(searchFocus){$('#search').focus();if(selection)$('#search').setSelectionRange(...selection);}
+  renderPagination();
+  if(sortSelect){$('#sort').replaceWith(sortSelect);sortSelect.value=`${state.sort}:${state.direction}`;if(sortFocus)sortSelect.focus({preventScroll:true});}
+  if(searchFocus){$('#search').focus({preventScroll:true});if(selection)$('#search').setSelectionRange(...selection);}
 }
 function selectionBar(){return state.selecting?`<div class="selection-bar"><span role="status">${state.selection.size} selected <small>· Up to 20 items</small></span><button class="text-button" data-action="clear-selection" ${state.selection.size?'':'disabled'}>Clear</button><button class="button primary" data-action="share-selection" ${state.selection.size?'':'disabled'}>Share selected ↗</button></div>`:'';}
 function toggleSelection(id){
@@ -85,6 +99,7 @@ function toggleSelection(id){
 }
 function descendants(id){const ids=new Set([id]);let changed=true;while(changed){changed=false;for(const place of locations())if(ids.has(place.parent_id)&&!ids.has(place.id)){ids.add(place.id);changed=true;}}return ids;}
 async function loadItems(append=false){
+  clearTimeout(debounce);
   if(!['items','archived'].includes(state.view))return;
   if(state.sample){const valid=state.location?descendants(state.location):null;let items=sampleItems.filter(item=>(!['inbox','archived'].includes(state.view))&&(!valid||valid.has(item.data.locationId))&&(!state.purchaseFor||(item.data.purchaseFor?.kind||'self')===state.purchaseFor)&&(!state.tag||item.data.tags.includes(state.tag))&&(!state.query||JSON.stringify(item.data).toLowerCase().includes(state.query.toLowerCase())));items=items.filter(item=>!state.noPhoto||(!item.art&&!item.photo_id)).toSorted(sampleOrder);state.items=items;state.total=items.length;state.recordTotal=items.length;renderItems();return;}
   const query=new URLSearchParams({limit:'120',sort:state.sort,direction:state.direction,photo:state.noPhoto?'missing':'all',group:'product'});
@@ -92,10 +107,11 @@ async function loadItems(append=false){
   const queryKey=query.toString();
   if(append&&(state.itemsLoading||state.itemsQuery!==queryKey))return;
   const requestId=++state.requestId;
-  query.set('offset',String(append?state.items.length:0));
+  const appendFrom=append?state.items.length:null;
+  query.set('offset',String(appendFrom??0));
   state.itemsLoading=true;state.itemsLoadError=false;
   if(!append){state.items=[];state.total=0;state.recordTotal=0;state.itemsQuery=null;}
-  renderItems();
+  if(append)renderPagination();else renderItems();
   try{
     const response=await api(`/api/items?${query}`);
     if(requestId!==state.requestId)return;
@@ -111,7 +127,7 @@ async function loadItems(append=false){
     if(requestId===state.requestId)state.itemsLoadError=true;
     throw error;
   }finally{
-    if(requestId===state.requestId){state.itemsLoading=false;renderItems();}
+    if(requestId===state.requestId){state.itemsLoading=false;renderItems(appendFrom);}
   }
 }
 async function refresh(){state.bootstrap=await api('/api/bootstrap');state.priceReference=state.bootstrap.priceReference;renderChrome();await renderView();}

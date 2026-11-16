@@ -132,3 +132,9 @@ Public collection pages use the existing `/share/*` Access rule. See `docs/API.m
 
 The collection loads its next page before you reach the bottom. Load more remains available after a request fails.
 Public pages include social image metadata. Messaging services can retain cached previews.
+
+
+For browser regression checks, start the local server on port 8797. Then run `python3 scripts/verify-browser.py`.
+This optional check requires Python, Playwright, and its WebKit browser. It uses synthetic local records and removes them afterward.
+It checks iPhone sharing, selection, public photos, paging order, scroll position, failed requests, and retries.
+Set `TEST_URL` to use another localhost port. The script rejects remote hosts.
