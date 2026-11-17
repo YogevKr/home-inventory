@@ -517,7 +517,7 @@ Collection exports exclude share tokens and public photo copies. Shares are not 
 
 ### Shared collections
 
-Collection sharing creates one public page for 1–20 selected purchases. Each entry uses a fixed snapshot.
+Collection sharing creates one public page for selected purchases, with no fixed item-count limit. Each entry uses a fixed snapshot.
 Names always appear. Default fields include brand and model. Private item descriptions never carry over.
 Deleting a purchase removes it from all shared collections. Removing a source photo hides its public copies.
 Empty collections, revoked links, and expired links return `404`.
@@ -545,7 +545,8 @@ The default expiry is 30 days. Use `null` for no expiry.
 For photos, use multipart form data: JSON in `data`, and converted photos in `photo-0`, `photo-1`, etc.
 Each file matches its zero-based item position. Set that entry's `photoId` to its source attachment ID.
 Photo validation and metadata removal match single-item sharing. Each photo must be smaller than 1.5 MB.
-The total upload limit is 30.1 MB. Invalid or stale inputs create no partial collection.
+Collection JSON accepts up to 1,000,000 characters. The total upload limit remains 30.1 MB.
+These request-size limits apply regardless of item count. Invalid or stale inputs create no partial collection.
 
 Public read-only routes are `/share/collection/:token` and `/share/collection/:token/photo/:position`.
 They remain under the existing `/share/*` public Access rule. All management routes remain protected.
